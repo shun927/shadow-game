@@ -7,3 +7,13 @@ field_extrinsics.json
 camera_left_calibration.json
 camera_right_calibration.json
 calibrations/*.json
+unity/Library/
+unity/Temp/
+unity/Obj/
+unity/Build/
+unity/Builds/
+unity/Logs/
+unity/UserSettings/
+unity/.vs/
+unity/*.csproj
+unity/*.sln

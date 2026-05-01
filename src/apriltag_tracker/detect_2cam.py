@@ -1,5 +1,6 @@
 import argparse
 import json
+import socket
 import time
 
 import cv2
@@ -170,6 +171,7 @@ def detect_target_from_camera(runtime, detector, object_points, target_id, field
             )
 
             return {
+                "id": marker_id,
                 "camera": runtime["config"]["name"],
                 "camera_index": int(runtime["config"]["camera_index"]),
                 "field_from_marker": field_from_marker,
@@ -185,6 +187,7 @@ def detect_target_from_camera(runtime, detector, object_points, target_id, field
 def payload(selected, results):
     selected_payload = {
         "timestamp_ms": int(time.time() * 1000),
+        "id": int(selected.get("id", 0)),
         "field_xyz_m": selected["field_xyz_m"],
         "raw_field_xyz_m": selected.get("raw_field_xyz_m", selected["field_xyz_m"]),
         "field_euler_zyx_deg": selected["field_euler_zyx_deg"],
@@ -216,6 +219,17 @@ def main():
         default=5,
         help="Print JSON every N frames with a detection. Use 0 to disable.",
     )
+    parser.add_argument(
+        "--udp-host",
+        default=None,
+        help="Send tracking JSON to this UDP host when set. Example: 127.0.0.1",
+    )
+    parser.add_argument(
+        "--udp-port",
+        type=int,
+        default=5005,
+        help="UDP port used with --udp-host.",
+    )
     args = parser.parse_args()
 
     config = load_json(args.config)
@@ -227,6 +241,8 @@ def main():
     tracking_filter = TrackingFilter(config)
     runtimes = []
     field_from_camera_by_name = {}
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if args.udp_host else None
+    udp_target = (args.udp_host, args.udp_port) if args.udp_host else None
 
     for camera_config in config["cameras"]:
         name = camera_config["name"]
@@ -261,8 +277,12 @@ def main():
             selected = tracking_filter.choose(results)
             if selected is not None:
                 selected = tracking_filter.smooth(selected)
-            if selected is not None and args.print_every and frame_index % args.print_every == 0:
-                print(json.dumps(payload(selected, results)), flush=True)
+            if selected is not None:
+                message = json.dumps(payload(selected, results))
+                if udp_socket and udp_target:
+                    udp_socket.sendto(message.encode("utf-8"), udp_target)
+                if args.print_every and frame_index % args.print_every == 0:
+                    print(message, flush=True)
 
             for name, frame in frames:
                 if selected is not None:
@@ -286,6 +306,8 @@ def main():
     finally:
         for runtime in runtimes:
             runtime["cap"].release()
+        if udp_socket:
+            udp_socket.close()
         cv2.destroyAllWindows()
 
 
