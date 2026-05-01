@@ -1,0 +1,250 @@
+import argparse
+import json
+import math
+import time
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+
+def load_calibration(path: str | None, width: int, height: int, fallback_fov_deg: float):
+    if path:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        camera_matrix = np.asarray(
+            data.get("camera_matrix") or data.get("K"),
+            dtype=np.float64,
+        )
+        dist_coeffs = np.asarray(
+            data.get("dist_coeffs")
+            or data.get("distortion_coefficients")
+            or data.get("D")
+            or [0, 0, 0, 0, 0],
+            dtype=np.float64,
+        ).reshape(-1, 1)
+        return camera_matrix, dist_coeffs, False
+
+    fov = math.radians(fallback_fov_deg)
+    fx = fy = width / (2.0 * math.tan(fov / 2.0))
+    camera_matrix = np.array(
+        [[fx, 0.0, width / 2.0], [0.0, fy, height / 2.0], [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    dist_coeffs = np.zeros((5, 1), dtype=np.float64)
+    return camera_matrix, dist_coeffs, True
+
+
+def make_detector():
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
+
+    if hasattr(cv2.aruco, "DetectorParameters"):
+        params = cv2.aruco.DetectorParameters()
+    else:
+        params = cv2.aruco.DetectorParameters_create()
+
+    if hasattr(cv2.aruco, "CORNER_REFINE_SUBPIX"):
+        params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+        params.cornerRefinementWinSize = 5
+
+    if hasattr(cv2.aruco, "ArucoDetector"):
+        return cv2.aruco.ArucoDetector(dictionary, params)
+
+    class LegacyDetector:
+        def detectMarkers(self, image):
+            return cv2.aruco.detectMarkers(image, dictionary, parameters=params)
+
+    return LegacyDetector()
+
+
+def marker_object_points(marker_size_m: float):
+    half = marker_size_m / 2.0
+    # OpenCV ArUco/AprilTag corners are top-left, top-right, bottom-right, bottom-left.
+    # Marker coordinates: x right, y up, z perpendicular to the marker plane.
+    return np.array(
+        [
+            [-half, half, 0.0],
+            [half, half, 0.0],
+            [half, -half, 0.0],
+            [-half, -half, 0.0],
+        ],
+        dtype=np.float64,
+    )
+
+
+def estimate_pose(corners, object_points, camera_matrix, dist_coeffs):
+    image_points = np.asarray(corners, dtype=np.float64).reshape(4, 2)
+    flag = getattr(cv2, "SOLVEPNP_IPPE_SQUARE", cv2.SOLVEPNP_ITERATIVE)
+    ok, rvec, tvec = cv2.solvePnP(
+        object_points,
+        image_points,
+        camera_matrix,
+        dist_coeffs,
+        flags=flag,
+    )
+    if not ok:
+        return None, None
+    return rvec.reshape(3, 1), tvec.reshape(3, 1)
+
+
+def rvec_to_euler_zyx_deg(rvec):
+    rotation, _ = cv2.Rodrigues(rvec)
+    sy = math.sqrt(rotation[0, 0] * rotation[0, 0] + rotation[1, 0] * rotation[1, 0])
+    singular = sy < 1e-6
+
+    if not singular:
+        roll_x = math.atan2(rotation[2, 1], rotation[2, 2])
+        pitch_y = math.atan2(-rotation[2, 0], sy)
+        yaw_z = math.atan2(rotation[1, 0], rotation[0, 0])
+    else:
+        roll_x = math.atan2(-rotation[1, 2], rotation[1, 1])
+        pitch_y = math.atan2(-rotation[2, 0], sy)
+        yaw_z = 0.0
+
+    return {
+        "roll_x": math.degrees(roll_x),
+        "pitch_y": math.degrees(pitch_y),
+        "yaw_z": math.degrees(yaw_z),
+    }
+
+
+def draw_pose(frame, marker_id, corners, rvec, tvec, camera_matrix, dist_coeffs, axis_length_m):
+    cv2.aruco.drawDetectedMarkers(frame, [corners], np.array([[marker_id]], dtype=np.int32))
+    cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, axis_length_m)
+
+    x, y, z = (float(v) for v in tvec.reshape(3))
+    distance = math.sqrt(x * x + y * y + z * z)
+    text = f"id:{marker_id} x:{x:+.3f} y:{y:+.3f} z:{z:+.3f}m d:{distance:.3f}m"
+    corner = tuple(np.asarray(corners).reshape(4, 2)[0].astype(int))
+    cv2.putText(
+        frame,
+        text,
+        (corner[0], max(24, corner[1] - 12)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (0, 255, 0),
+        2,
+        cv2.LINE_AA,
+    )
+
+
+def pose_payload(marker_id, rvec, tvec):
+    x, y, z = (float(v) for v in tvec.reshape(3))
+    return {
+        "timestamp_ms": int(time.time() * 1000),
+        "id": int(marker_id),
+        "camera_xyz_m": {"x": x, "y": y, "z": z},
+        "distance_m": math.sqrt(x * x + y * y + z * z),
+        "rvec": [float(v) for v in rvec.reshape(3)],
+        "euler_zyx_deg": rvec_to_euler_zyx_deg(rvec),
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Track AprilTag 36h11 pose from one fixed webcam."
+    )
+    parser.add_argument("--camera", type=int, default=0, help="Webcam index.")
+    parser.add_argument(
+        "--marker-size-m",
+        type=float,
+        required=True,
+        help="Printed marker outer black-square size in meters.",
+    )
+    parser.add_argument(
+        "--calibration",
+        type=str,
+        help="Camera calibration JSON generated by calibrate_camera.py.",
+    )
+    parser.add_argument(
+        "--fallback-fov-deg",
+        type=float,
+        default=60.0,
+        help="Horizontal FOV used only when no calibration file is supplied.",
+    )
+    parser.add_argument("--width", type=int, default=1280, help="Capture width.")
+    parser.add_argument("--height", type=int, default=720, help="Capture height.")
+    parser.add_argument(
+        "--print-every",
+        type=int,
+        default=5,
+        help="Print JSON every N frames. Use 0 to disable.",
+    )
+    args = parser.parse_args()
+
+    cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
+
+    if not cap.isOpened():
+        raise SystemExit(f"Could not open camera index {args.camera}")
+
+    ok, frame = cap.read()
+    if not ok:
+        raise SystemExit("Could not read from camera")
+
+    height, width = frame.shape[:2]
+    camera_matrix, dist_coeffs, using_fallback = load_calibration(
+        args.calibration,
+        width,
+        height,
+        args.fallback_fov_deg,
+    )
+
+    if using_fallback:
+        print(
+            "WARNING: no calibration supplied; x/y/z are approximate. "
+            "Run calibrate_camera.py for accurate 6DoF.",
+            flush=True,
+        )
+
+    detector = make_detector()
+    object_points = marker_object_points(args.marker_size_m)
+    axis_length_m = args.marker_size_m * 0.5
+    frame_index = 0
+
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        corners_list, ids, _ = detector.detectMarkers(gray)
+
+        if ids is not None:
+            for corners, marker_id in zip(corners_list, ids.flatten()):
+                rvec, tvec = estimate_pose(
+                    corners,
+                    object_points,
+                    camera_matrix,
+                    dist_coeffs,
+                )
+                if rvec is None:
+                    continue
+
+                draw_pose(
+                    frame,
+                    int(marker_id),
+                    corners,
+                    rvec,
+                    tvec,
+                    camera_matrix,
+                    dist_coeffs,
+                    axis_length_m,
+                )
+
+                if args.print_every and frame_index % args.print_every == 0:
+                    print(json.dumps(pose_payload(marker_id, rvec, tvec)), flush=True)
+
+        cv2.imshow("AprilTag 36h11 6DoF", frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key in (27, ord("q")):
+            break
+
+        frame_index += 1
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    main()

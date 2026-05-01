@@ -1,0 +1,67 @@
+{
+  "field": {
+    "size_m": 0.3
+  },
+  "cameras": [
+    {
+      "name": "left",
+      "camera_index": 1,
+      "backend": "auto",
+      "fourcc": "MJPG",
+      "apply_settings": false,
+      "require_frame_on_open": true,
+      "calibration": "calibrations/camera_left_calibration.json",
+      "width": 640,
+      "height": 480,
+      "fps": 30
+    },
+    {
+      "name": "right",
+      "camera_index": 2,
+      "backend": "auto",
+      "fourcc": "MJPG",
+      "apply_settings": false,
+      "require_frame_on_open": true,
+      "calibration": "calibrations/camera_right_calibration.json",
+      "width": 640,
+      "height": 480,
+      "fps": 30
+    }
+  ],
+  "moving_tag": {
+    "id": 0,
+    "size_m": 0.07
+  },
+  "tracking": {
+    "min_image_area_px2": 600,
+    "smoothing_alpha": 0.35,
+    "max_jump_m": 0.12,
+    "camera_switch_area_ratio": 1.35
+  },
+  "reference_tags": [
+    {
+      "id": 10,
+      "size_m": 0.04,
+      "center_m": { "x": -0.12, "y": 0.12, "z": 0.0 },
+      "yaw_deg": 0.0
+    },
+    {
+      "id": 11,
+      "size_m": 0.04,
+      "center_m": { "x": 0.12, "y": 0.12, "z": 0.0 },
+      "yaw_deg": 0.0
+    },
+    {
+      "id": 12,
+      "size_m": 0.04,
+      "center_m": { "x": 0.12, "y": -0.12, "z": 0.0 },
+      "yaw_deg": 0.0
+    },
+    {
+      "id": 13,
+      "size_m": 0.04,
+      "center_m": { "x": -0.12, "y": -0.12, "z": 0.0 },
+      "yaw_deg": 0.0
+    }
+  ]
+}

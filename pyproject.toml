@@ -1,0 +1,25 @@
+[project]
+name = "apriltag-6dof-tracker"
+version = "0.1.0"
+description = "AprilTag 36h11 6DoF tracker for one fixed webcam."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26",
+    "opencv-contrib-python>=4.10,<5",
+]
+
+[project.scripts]
+apriltag-calibrate = "apriltag_tracker.calibrate_camera:main"
+apriltag-calibrate-field = "apriltag_tracker.calibrate_field:main"
+apriltag-detect = "apriltag_tracker.detect_single:main"
+apriltag-detect-2cam = "apriltag_tracker.detect_2cam:main"
+apriltag-generate = "apriltag_tracker.generate_marker:main"
+apriltag-list-cameras = "apriltag_tracker.list_cameras:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

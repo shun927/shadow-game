@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.egg-info/
+*.py[cod]
+camera_calibration.json
+field_extrinsics.json
+camera_left_calibration.json
+camera_right_calibration.json
+calibrations/*.json
