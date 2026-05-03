@@ -19,6 +19,13 @@
 uv run apriltag-generate --id 0 --pixels 1000 --margin-pixels 160 --output markers/apriltag_36h11_id0.png
 ```
 
+立方体オブジェクト用マーカー:
+
+```powershell
+uv run apriltag-generate --id 1 --pixels 800 --margin-pixels 120 --output markers/cube_a_id1.png
+uv run apriltag-generate --id 2 --pixels 800 --margin-pixels 120 --output markers/cube_b_id2.png
+```
+
 フィールド外部校正用マーカー:
 
 ```powershell
@@ -68,6 +75,7 @@ uv run apriltag-calibrate --config configs/field_config.json --camera-name right
 - FPS: `30`
 - フィールドサイズ: `0.300 m`
 - 手持ちタグ: ID `0`、`0.070 m`
+- 立方体タグ: ID `1` と `2`、`configs/field_config.json` の `object_tags[].size_m` に実測した黒枠サイズを設定
 - 基準タグ: ID `10` から `13`、`0.040 m`
 
 使えるカメラ番号は次で確認できます。
@@ -140,6 +148,25 @@ Unity側では次のように対応します。
 - Unity `Y = Python z`
 - Unity `Z = Python y`
 
+## 立方体オブジェクトをUnityと同期する
+
+Unity の `MainScene` では `Shadow Wall A` と `Shadow Wall B` に `PhysicalShadowCaster` が付いています。
+
+- `Marker Id`: 現実の立方体に貼った AprilTag ID。初期値は `1` と `2`
+- `Physical Size Meters`: 立方体の実寸。初期値は `x=0.05, y=0.08, z=0.10`
+- `Field Frame`: `Stage` の子オブジェクト `Frame`。この表示幅を現実の30cmとして扱い、物体サイズを計算します
+- `Frame Physical Size Meters`: `Frame` の現実サイズ。初期値は `x=0.3, y=0.3`
+- `Field World Size`: `Field Frame` が未設定の時だけ使う予備のフィールド幅
+- `Marker To Object Center Offset Meters`: マーカー中心から物体中心までのズレ
+- `Manual Field Position Meters`: トラッキングがない時の実験用手動位置
+- `Use Tracking When Available`: UDPで該当IDが届いた時だけ現実連動する
+- `Place Center Above Field Surface`: `Physical Size Meters.z` を高さとして使い、オブジェクト中心をFrame面より半分上に置く
+- `Footprint Surface Lift`: 底面メッシュをFrame面から少し手前に浮かせる量。表示のちらつき防止用
+- `Sync Moved Position To Manual Field Position`: 再生していない時にSceneビューでオブジェクトを動かすと、その位置を手動配置として保存する
+- Sceneビューでは水色のGizmoが底面プレビューです。Gizmoは角丸ではなく完全な長方形です
+
+立方体の置き方やサイズを変えた場合は、Unity Inspector の `PhysicalShadowCaster` と `configs/field_config.json` の `object_tags[].size_m` を実測値に合わせてください。
+
 ## 精度と安定性
 
 - 内部キャリブレーション、外部校正、本番検出は同じ `configs/field_config.json` のカメラ設定で行う
@@ -152,7 +179,11 @@ Unity側では次のように対応します。
 
 - `min_image_area_px2`: 小さすぎる検出を捨てるしきい値
 - `smoothing_alpha`: 位置の平滑化。大きいほど速く追従、小さいほど滑らか
+- `single_camera_alpha`: 片方のカメラだけで追跡している時の追従速度
+- `camera_transition_alpha`: 2台検出から1台検出へ切り替わる瞬間、または選択カメラが変わる瞬間の追従速度
 - `max_jump_m`: 瞬間的な大ジャンプを捨てる距離
+- `jump_reset_frames`: 大ジャンプがこのフレーム数だけ続いたら、誤検出ではなく実際の移動として受け入れる
+- `allow_single_camera_pose`: 片方のカメラだけで見えている時も、マーカーの実寸と見かけサイズから単眼で奥行きを推定して追従する
 - `camera_switch_area_ratio`: 左右カメラの切替を抑える比率
 
 標準では `field_xyz_m` は平滑化後、`raw_field_xyz_m` は生の測定値です。

@@ -17,6 +17,30 @@ namespace OomiyaFes.Field
             return new Vector3(position.x, position.z, position.y);
         }
 
+        public static Vector3 PythonDirectionToUnity(Vec3 direction)
+        {
+            return PythonToUnity(direction).normalized;
+        }
+
+        public static bool TryMarkerBasisToUnityRotation(TrackingMessage message, out Quaternion rotation)
+        {
+            rotation = Quaternion.identity;
+            if (message?.marker_y_axis_field == null || message.marker_z_axis_field == null)
+            {
+                return false;
+            }
+
+            var up = PythonDirectionToUnity(message.marker_y_axis_field);
+            var forward = PythonDirectionToUnity(message.marker_z_axis_field);
+            if (up.sqrMagnitude < 0.0001f || forward.sqrMagnitude < 0.0001f)
+            {
+                return false;
+            }
+
+            rotation = Quaternion.LookRotation(forward, up);
+            return true;
+        }
+
         public static Quaternion PythonEulerToUnity(Euler euler)
         {
             if (euler == null)

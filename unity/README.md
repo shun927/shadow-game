@@ -14,4 +14,4 @@ uv run apriltag-detect-2cam --config configs/field_config.json --extrinsics cali
 - Unity `Y = Python z`
 - Unity `Z = Python y`
 
-入力が来るとライト位置・向き・フィールド面との照射点が表示されます。通信が途切れると表示色が薄くなります。
+入力が来るとライト位置・向き・フィールド面との照射点が表示されます。`ID 0` の姿勢に合わせて Spot Light も動くため、30cm x 30cm のフィールドへライトを向ける入力確認に使えます。通信が途切れると表示色が薄くなります。

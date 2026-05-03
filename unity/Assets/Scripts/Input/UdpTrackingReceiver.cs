@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -17,6 +18,7 @@ namespace OomiyaFes.Input
         private volatile bool running;
         private readonly object sync = new object();
         private TrackingMessage latest;
+        private readonly Dictionary<int, TrackedMarkerMessage> latestById = new Dictionary<int, TrackedMarkerMessage>();
         private DateTime lastReceiveUtc;
 
         public bool HasPose { get; private set; }
@@ -38,6 +40,26 @@ namespace OomiyaFes.Input
                 {
                     return latest;
                 }
+            }
+        }
+
+        public bool TryGetLatest(int markerId, out TrackedMarkerMessage message)
+        {
+            lock (sync)
+            {
+                if (latestById.TryGetValue(markerId, out message))
+                {
+                    return true;
+                }
+
+                if (latest != null && latest.id == markerId)
+                {
+                    message = latest;
+                    return true;
+                }
+
+                message = null;
+                return false;
             }
         }
 
@@ -83,6 +105,18 @@ namespace OomiyaFes.Input
                     lock (sync)
                     {
                         latest = message;
+                        latestById[message.id] = message;
+                        if (message.tracked_markers != null)
+                        {
+                            for (int i = 0; i < message.tracked_markers.Length; i++)
+                            {
+                                var marker = message.tracked_markers[i];
+                                if (marker != null)
+                                {
+                                    latestById[marker.id] = marker;
+                                }
+                            }
+                        }
                         HasPose = true;
                         lastReceiveUtc = DateTime.UtcNow;
                     }

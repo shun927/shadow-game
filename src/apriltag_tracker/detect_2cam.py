@@ -22,15 +22,30 @@ from .core import (
 )
 
 
+def axes_payload(transform):
+    rotation = np.asarray(transform, dtype=np.float64).reshape(4, 4)[:3, :3]
+    return {
+        "marker_x_axis_field": xyz_payload(rotation[:, 0]),
+        "marker_y_axis_field": xyz_payload(rotation[:, 1]),
+        "marker_z_axis_field": xyz_payload(rotation[:, 2]),
+    }
+
+
 class TrackingFilter:
     def __init__(self, config):
         tracking = config.get("tracking", {})
         self.min_area_px2 = float(tracking.get("min_image_area_px2", 600.0))
         self.smoothing_alpha = float(tracking.get("smoothing_alpha", 0.35))
+        self.single_camera_alpha = float(tracking.get("single_camera_alpha", 0.75))
+        self.camera_transition_alpha = float(tracking.get("camera_transition_alpha", 0.9))
         self.max_jump_m = float(tracking.get("max_jump_m", 0.12))
+        self.jump_reset_frames = int(tracking.get("jump_reset_frames", 5))
+        self.allow_single_camera_pose = bool(tracking.get("allow_single_camera_pose", True))
         self.switch_area_ratio = float(tracking.get("camera_switch_area_ratio", 1.35))
         self.last_camera = None
+        self.last_visible_count = 0
         self.filtered_xyz = None
+        self.rejected_jump_count = 0
 
     def filter_candidates(self, results):
         return [
@@ -58,7 +73,7 @@ class TrackingFilter:
                 return previous
         return best
 
-    def smooth(self, selected):
+    def smooth(self, selected, visible_count=1):
         raw_xyz = np.asarray(
             [
                 selected["field_xyz_m"]["x"],
@@ -69,21 +84,35 @@ class TrackingFilter:
         )
 
         rejected_jump = False
+        camera_changed = self.last_camera is not None and selected["camera"] != self.last_camera
+        entered_single_camera = self.last_visible_count > 1 and visible_count == 1
         if self.filtered_xyz is None:
             self.filtered_xyz = raw_xyz
+        elif self.allow_single_camera_pose and visible_count == 1:
+            alpha = self.camera_transition_alpha if camera_changed or entered_single_camera else self.single_camera_alpha
+            self.filtered_xyz = self.filtered_xyz * (1.0 - alpha) + raw_xyz * alpha
+            self.rejected_jump_count = 0
         else:
             jump = float(np.linalg.norm(raw_xyz - self.filtered_xyz))
             if jump <= self.max_jump_m:
                 alpha = self.smoothing_alpha
                 self.filtered_xyz = self.filtered_xyz * (1.0 - alpha) + raw_xyz * alpha
+                self.rejected_jump_count = 0
             else:
                 rejected_jump = True
+                self.rejected_jump_count += 1
+                if self.rejected_jump_count >= self.jump_reset_frames:
+                    self.filtered_xyz = raw_xyz
+                    self.rejected_jump_count = 0
+                    rejected_jump = False
 
         self.last_camera = selected["camera"]
+        self.last_visible_count = visible_count
         stable = dict(selected)
         stable["raw_field_xyz_m"] = selected["field_xyz_m"]
         stable["field_xyz_m"] = xyz_payload(self.filtered_xyz)
         stable["rejected_jump"] = rejected_jump
+        stable["tracking_mode"] = "single_camera_pose" if visible_count == 1 else "multi_camera_pose"
         return stable
 
 
@@ -125,26 +154,28 @@ def load_camera_runtime(camera_config):
     }
 
 
-def detect_target_from_camera(runtime, detector, object_points, target_id, field_from_camera):
+def detect_targets_from_camera(runtime, detector, object_points_by_id, field_from_camera):
     cap = runtime["cap"]
     ok, frame = cap.read()
     if not ok:
-        return None, None
+        return [], None
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     corners_list, ids, _ = detector.detectMarkers(gray)
+    results = []
 
     if ids is not None:
         cv2.aruco.drawDetectedMarkers(frame, corners_list, ids)
         for corners, marker_id in zip(corners_list, ids.flatten()):
             marker_id = int(marker_id)
-            if marker_id != target_id:
+            if marker_id not in object_points_by_id:
                 draw_tag_label(frame, f"id {marker_id}", corners, (128, 128, 128))
                 continue
 
+            marker_points = object_points_by_id[marker_id]
             rvec, tvec = estimate_pose(
                 corners,
-                object_points,
+                marker_points,
                 runtime["camera_matrix"],
                 runtime["dist_coeffs"],
             )
@@ -167,33 +198,57 @@ def detect_target_from_camera(runtime, detector, object_points, target_id, field
                 runtime["dist_coeffs"],
                 rvec,
                 tvec,
-                float(np.max(object_points) - np.min(object_points)) * 0.5,
+                float(np.max(marker_points) - np.min(marker_points)) * 0.5,
             )
 
-            return {
+            result = {
                 "id": marker_id,
                 "camera": runtime["config"]["name"],
                 "camera_index": int(runtime["config"]["camera_index"]),
                 "field_from_marker": field_from_marker,
                 "field_xyz_m": xyz_payload(field_xyz),
                 "field_euler_zyx_deg": rotation_to_euler_zyx_deg(field_from_marker[:3, :3]),
+                **axes_payload(field_from_marker),
                 "camera_xyz_m": xyz_payload(tvec),
                 "image_area_px2": area,
-            }, frame
+            }
+            results.append(result)
 
-    return None, frame
+    return results, frame
 
 
-def payload(selected, results):
+def payload(selected, results, tracked_markers):
+    timestamp_ms = int(time.time() * 1000)
     selected_payload = {
-        "timestamp_ms": int(time.time() * 1000),
+        "timestamp_ms": timestamp_ms,
         "id": int(selected.get("id", 0)),
         "field_xyz_m": selected["field_xyz_m"],
         "raw_field_xyz_m": selected.get("raw_field_xyz_m", selected["field_xyz_m"]),
         "field_euler_zyx_deg": selected["field_euler_zyx_deg"],
+        "marker_x_axis_field": selected["marker_x_axis_field"],
+        "marker_y_axis_field": selected["marker_y_axis_field"],
+        "marker_z_axis_field": selected["marker_z_axis_field"],
         "visible_cameras": [result["camera"] for result in results],
         "selected_camera": selected["camera"],
         "rejected_jump": bool(selected.get("rejected_jump", False)),
+        "tracking_mode": selected.get("tracking_mode", "multi_camera_pose"),
+        "tracked_markers": [
+            {
+                "timestamp_ms": int(marker.get("timestamp_ms", timestamp_ms)),
+                "id": int(marker.get("id", 0)),
+                "field_xyz_m": marker["field_xyz_m"],
+                "raw_field_xyz_m": marker.get("raw_field_xyz_m", marker["field_xyz_m"]),
+                "field_euler_zyx_deg": marker["field_euler_zyx_deg"],
+                "marker_x_axis_field": marker["marker_x_axis_field"],
+                "marker_y_axis_field": marker["marker_y_axis_field"],
+                "marker_z_axis_field": marker["marker_z_axis_field"],
+                "visible_cameras": [result["camera"] for result in marker.get("results", [])],
+                "selected_camera": marker["camera"],
+                "rejected_jump": bool(marker.get("rejected_jump", False)),
+                "tracking_mode": marker.get("tracking_mode", "multi_camera_pose"),
+            }
+            for marker in tracked_markers
+        ],
         "per_camera": {},
     }
     for result in results:
@@ -201,6 +256,9 @@ def payload(selected, results):
             "camera_index": result["camera_index"],
             "field_xyz_m": result["field_xyz_m"],
             "field_euler_zyx_deg": result["field_euler_zyx_deg"],
+            "marker_x_axis_field": result["marker_x_axis_field"],
+            "marker_y_axis_field": result["marker_y_axis_field"],
+            "marker_z_axis_field": result["marker_z_axis_field"],
             "camera_xyz_m": result["camera_xyz_m"],
             "image_area_px2": result["image_area_px2"],
         }
@@ -236,9 +294,13 @@ def main():
     extrinsics = load_json(args.extrinsics)
     detector = make_detector()
 
-    target_id = int(config["moving_tag"]["id"])
-    object_points = marker_object_points(float(config["moving_tag"]["size_m"]))
-    tracking_filter = TrackingFilter(config)
+    target_tags = [config["moving_tag"], *config.get("object_tags", [])]
+    object_points_by_id = {
+        int(tag["id"]): marker_object_points(float(tag["size_m"]))
+        for tag in target_tags
+    }
+    moving_tag_id = int(config["moving_tag"]["id"])
+    tracking_filters = {marker_id: TrackingFilter(config) for marker_id in object_points_by_id}
     runtimes = []
     field_from_camera_by_name = {}
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if args.udp_host else None
@@ -262,23 +324,33 @@ def main():
 
             for runtime in runtimes:
                 name = runtime["config"]["name"]
-                result, frame = detect_target_from_camera(
+                camera_results, frame = detect_targets_from_camera(
                     runtime,
                     detector,
-                    object_points,
-                    target_id,
+                    object_points_by_id,
                     field_from_camera_by_name[name],
                 )
-                if result is not None:
-                    results.append(result)
+                results.extend(camera_results)
                 if frame is not None:
                     frames.append((name, frame))
 
-            selected = tracking_filter.choose(results)
+            tracked_markers = []
+            for marker_id, tracking_filter in tracking_filters.items():
+                marker_results = [result for result in results if int(result["id"]) == marker_id]
+                selected_marker = tracking_filter.choose(marker_results)
+                if selected_marker is None:
+                    continue
+                selected_marker = tracking_filter.smooth(selected_marker, len(marker_results))
+                selected_marker["timestamp_ms"] = int(time.time() * 1000)
+                selected_marker["results"] = marker_results
+                tracked_markers.append(selected_marker)
+
+            selected = next(
+                (marker for marker in tracked_markers if int(marker["id"]) == moving_tag_id),
+                None,
+            )
             if selected is not None:
-                selected = tracking_filter.smooth(selected)
-            if selected is not None:
-                message = json.dumps(payload(selected, results))
+                message = json.dumps(payload(selected, results, tracked_markers))
                 if udp_socket and udp_target:
                     udp_socket.sendto(message.encode("utf-8"), udp_target)
                 if args.print_every and frame_index % args.print_every == 0:

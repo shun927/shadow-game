@@ -152,14 +152,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   receiver: {fileID: 1002}
   fieldPlane: {fileID: 0}
+  markerPlane: {fileID: 0}
   lightMarker: {fileID: 0}
   hitMarker: {fileID: 0}
+  spotLight: {fileID: 0}
   directionLine: {fileID: 0}
   lightRenderer: {fileID: 0}
   hitRenderer: {fileID: 0}
   connectedColor: {r: 0.1, g: 0.9, b: 1, a: 1}
   disconnectedColor: {r: 0.5, g: 0.5, b: 0.5, a: 0.35}
   directionLength: 0.25
+  spotRange: 0.65
+  spotAngle: 28
+  spotIntensity: 6
+  movingMarkerSize: 0.07
+  invertLightDirection: 0
 --- !u!1 &2000
 GameObject:
   m_ObjectHideFlags: 0

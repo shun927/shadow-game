@@ -32,6 +32,18 @@
     "id": 0,
     "size_m": 0.07
   },
+  "object_tags": [
+    {
+      "id": 1,
+      "size_m": 0.04,
+      "label": "cube_a"
+    },
+    {
+      "id": 2,
+      "size_m": 0.04,
+      "label": "cube_b"
+    }
+  ],
   "tracking": {
     "min_image_area_px2": 600,
     "smoothing_alpha": 0.35,
