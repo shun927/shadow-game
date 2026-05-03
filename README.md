@@ -48,6 +48,56 @@ uv run python tools/send_sample_tracking_udp.py --host 127.0.0.1 --port 5005
 
 Unity は `6000.0.68f1` を使います。`unity/` を Unity Hub で開き、`Assets/Scenes/InputVisualization.unity` を再生します。
 
+## キャリブレーションで使うコマンド
+
+作業前にプロジェクトルートへ移動します。
+
+```powershell
+cd "C:\Main_folder\shibalab\2026\大宮祭\shadow-game"
+```
+
+カメラ番号を確認します。
+
+```powershell
+uv run apriltag-list-cameras --backend msmf --max-index 6
+```
+
+印刷用マーカーをA4 PDFで作り直す場合:
+
+```powershell
+uv run python tools/create_marker_sheet_pdf.py --output markers/apriltag_a4_sheet.pdf
+```
+
+内部キャリブレーション用チェッカーボードをA4 PDFで作る場合:
+
+```powershell
+uv run python tools/create_checkerboard_pdf.py --output markers/checkerboard_10x7_16mm_a4.pdf
+```
+
+左カメラの内部キャリブレーション:
+
+```powershell
+uv run apriltag-calibrate --config configs/field_config.json --camera-name left --square-size-m 0.016 --board-cols 9 --board-rows 6 --samples 20
+```
+
+右カメラの内部キャリブレーション:
+
+```powershell
+uv run apriltag-calibrate --config configs/field_config.json --camera-name right --square-size-m 0.016 --board-cols 9 --board-rows 6 --samples 20
+```
+
+フィールド外部校正:
+
+```powershell
+uv run apriltag-calibrate-field --config configs/field_config.json --output calibrations/field_extrinsics.json
+```
+
+外部校正後、UnityへUDP送信して確認します。
+
+```powershell
+uv run apriltag-detect-2cam --config configs/field_config.json --extrinsics calibrations/field_extrinsics.json --udp-host 127.0.0.1 --udp-port 5005
+```
+
 ## ドキュメント
 
 - [docs/README.md](docs/README.md): ドキュメント入口
