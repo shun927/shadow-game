@@ -269,6 +269,12 @@ public class PhysicalShadowCaster : MonoBehaviour
         return bounds.size.x > 0.0001f && bounds.size.y > 0.0001f;
     }
 
+    public bool TryGetWorldShadowCaster(out Bounds footprintBounds, out float heightWorld)
+    {
+        heightWorld = GetObjectHeightWorld();
+        return TryGetWorldFootprintBounds(out footprintBounds);
+    }
+
     private void UpdateRectangularFootprintVisual()
     {
         var spriteRenderer = GetComponent<SpriteRenderer>();

@@ -6,7 +6,7 @@ public class TimeManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI timerText;
 
     private float elapsedTime;
-    private bool isRunning = true;
+    private bool isRunning;
 
     void Update()
     {

@@ -2,6 +2,13 @@ using UnityEngine;
 
 public class PointManager : MonoBehaviour
 {
+    private enum PointMovementMode
+    {
+        Fixed,
+        Orbit,
+        Flee,
+    }
+
     [SerializeField] private GameObject pointPrefab;
 
     [Header("Count Sprites")]
@@ -13,6 +20,11 @@ public class PointManager : MonoBehaviour
     [SerializeField] private Vector2[] spawnPositions1;
     [SerializeField] private Vector2[] spawnPositions2;
     [SerializeField] private Vector2[] spawnPositions3;
+
+    [Header("Movement Per Point")]
+    [SerializeField] private PointMovementMode point1Movement = PointMovementMode.Fixed;
+    [SerializeField] private PointMovementMode point2Movement = PointMovementMode.Orbit;
+    [SerializeField] private PointMovementMode point3Movement = PointMovementMode.Flee;
 
     [Header("Collection")]
     [SerializeField] private float collectDistance = 0.5f;
@@ -37,6 +49,7 @@ public class PointManager : MonoBehaviour
     private float orbitAngle;
     private Vector2 orbitCenter;
     private Vector3 lastCollectPosition;
+    private bool isGameActive;
 
     public Vector3 RespawnPoint => points == 0 ? new Vector3(0f, 0f, -2f) : lastCollectPosition;
 
@@ -52,17 +65,16 @@ public class PointManager : MonoBehaviour
         if (mainManager == null)
             mainManager = FindFirstObjectByType<MainManager>();
 
-        SpawnPoint();
+        ResetGame(false);
     }
 
     void Update()
     {
-        if (currentPoint == null || player == null) return;
+        if (!isGameActive || currentPoint == null || player == null) return;
 
-        int pointType = GetPointType();
+        PointMovementMode movementMode = GetCurrentMovementMode();
 
-        // ポイント2: 指定座標を中心に回転
-        if (pointType == 1)
+        if (movementMode == PointMovementMode.Orbit)
         {
             orbitAngle += orbitSpeed * Time.deltaTime;
             float rad = orbitAngle * Mathf.Deg2Rad;
@@ -72,8 +84,7 @@ public class PointManager : MonoBehaviour
                 pointZ);
             currentPoint.transform.position = pos;
         }
-        // ポイント3: プレイヤーを避けながら中間地点へ逃げる
-        else if (pointType == 2)
+        else if (movementMode == PointMovementMode.Flee)
         {
             Vector2 playerPos = (Vector2)player.position;
             Vector2 pointPos = (Vector2)currentPoint.transform.position;
@@ -145,6 +156,16 @@ public class PointManager : MonoBehaviour
         return points % 3;
     }
 
+    private PointMovementMode GetCurrentMovementMode()
+    {
+        return GetPointType() switch
+        {
+            1 => point2Movement,
+            2 => point3Movement,
+            _ => point1Movement,
+        };
+    }
+
     private void CollectPoint()
     {
         lastCollectPosition = currentPoint.transform.position;
@@ -192,9 +213,35 @@ public class PointManager : MonoBehaviour
         currentPoint = Instantiate(pointPrefab, pos, Quaternion.identity);
         orbitAngle = 0f;
 
-        if (GetPointType() == 1)
+        if (GetCurrentMovementMode() == PointMovementMode.Orbit)
         {
             orbitCenter = positions[index];
         }
+    }
+
+    public void ResetGame(bool startImmediately)
+    {
+        if (currentPoint != null)
+        {
+            Destroy(currentPoint);
+            currentPoint = null;
+        }
+
+        points = 0;
+        orbitAngle = 0f;
+        lastCollectPosition = Vector3.zero;
+        isGameActive = startImmediately;
+
+        if (countSprites == null)
+            countSprites = new GameObject[] { pointCount1, pointCount2, pointCount3 };
+
+        foreach (var cs in countSprites)
+        {
+            if (cs != null)
+                cs.SetActive(false);
+        }
+
+        if (isGameActive)
+            SpawnPoint();
     }
 }

@@ -5,22 +5,6 @@ using UnityEngine;
 
 public class ShadowManager : MonoBehaviour
 {
-    private struct ShadowPolygon
-    {
-        public readonly Vector2 A;
-        public readonly Vector2 B;
-        public readonly Vector2 C;
-        public readonly Vector2 D;
-
-        public ShadowPolygon(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
-        {
-            A = a;
-            B = b;
-            C = c;
-            D = d;
-        }
-    }
-
     [Header("Shadow Circle")]
     [SerializeField] private Transform shadowCircle;
     [SerializeField] private float shadowRadius = 3f;
@@ -40,6 +24,8 @@ public class ShadowManager : MonoBehaviour
     [Header("Object Shadows")]
     [SerializeField] private Transform[] shadowCasters;
     [SerializeField] private float shadowLength = 12f;
+    [SerializeField] private float lightHeightMeters = 0.2f;
+    [SerializeField] private float minLightObjectHeightGapMeters = 0.02f;
     [SerializeField] private Color generatedShadowColor = new Color(0f, 0f, 0f, 0.9f);
     [SerializeField] private int shadowSortingOrder = -8;
     [SerializeField] private float wallPadding = 0.08f;
@@ -67,7 +53,7 @@ public class ShadowManager : MonoBehaviour
     private Vector3 lastPlayerPos;
     private Vector3 lastSafePlayerPos;
     private readonly List<GameObject> trailShadows = new List<GameObject>();
-    private readonly List<ShadowPolygon> currentShadows = new List<ShadowPolygon>();
+    private readonly List<Vector2[]> currentShadows = new List<Vector2[]>();
     private int checkpointTrailCount;
     private Mesh shadowMesh;
     private MeshFilter shadowMeshFilter;
@@ -269,38 +255,31 @@ public class ShadowManager : MonoBehaviour
 
         for (int i = 0; i < shadowCasters.Length; i++)
         {
-            if (shadowCasters[i] == null || !TryGetCasterBounds(shadowCasters[i], out var bounds))
+            if (shadowCasters[i] == null ||
+                !TryGetCasterShadowData(shadowCasters[i], out var bounds, out var objectHeightWorld))
+            {
+                continue;
+            }
+
+            Vector2[] polygon = BuildHeightAwareShadowPolygon(bounds, objectHeightWorld, lightWorld);
+            if (polygon.Length < 3)
                 continue;
 
-            Vector2 light = lightWorld;
-            Vector2 center = bounds.center;
-            Vector2 axis = (center - light).normalized;
-            if (axis.sqrMagnitude < 0.0001f)
-                axis = Vector2.up;
-
-            Vector2 tangent = new Vector2(-axis.y, axis.x);
-            GetSilhouette(bounds, tangent, out var nearA, out var nearB);
-
-            Vector2 farA = nearA + (nearA - light).normalized * shadowLength;
-            Vector2 farB = nearB + (nearB - light).normalized * shadowLength;
-            var polygon = new ShadowPolygon(nearA, nearB, farB, farA);
             currentShadows.Add(polygon);
 
             int start = vertices.Count;
-            vertices.Add(new Vector3(polygon.A.x, polygon.A.y, shadowZ));
-            vertices.Add(new Vector3(polygon.B.x, polygon.B.y, shadowZ));
-            vertices.Add(new Vector3(polygon.C.x, polygon.C.y, shadowZ));
-            vertices.Add(new Vector3(polygon.D.x, polygon.D.y, shadowZ));
-            triangles.Add(start);
-            triangles.Add(start + 1);
-            triangles.Add(start + 2);
-            triangles.Add(start);
-            triangles.Add(start + 2);
-            triangles.Add(start + 3);
-            colors.Add(generatedShadowColor);
-            colors.Add(generatedShadowColor);
-            colors.Add(generatedShadowColor);
-            colors.Add(generatedShadowColor);
+            for (int p = 0; p < polygon.Length; p++)
+            {
+                vertices.Add(new Vector3(polygon[p].x, polygon[p].y, shadowZ));
+                colors.Add(generatedShadowColor);
+            }
+
+            for (int p = 1; p < polygon.Length - 1; p++)
+            {
+                triangles.Add(start);
+                triangles.Add(start + p);
+                triangles.Add(start + p + 1);
+            }
         }
 
         shadowMesh.Clear();
@@ -310,36 +289,50 @@ public class ShadowManager : MonoBehaviour
         shadowMesh.RecalculateBounds();
     }
 
-    private static void GetSilhouette(Bounds bounds, Vector2 tangent, out Vector2 a, out Vector2 b)
+    private Vector2[] BuildHeightAwareShadowPolygon(Bounds bounds, float objectHeightWorld, Vector2 light)
+    {
+        Vector2[] bottomCorners = GetBoundsCorners(bounds);
+        var candidates = new List<Vector2>(bottomCorners);
+
+        float worldHeightScale = GetAverageFieldToWorldScale();
+        float lightHeightWorld = Mathf.Max(0.001f, lightHeightMeters * worldHeightScale);
+        float minGapWorld = Mathf.Max(0.001f, minLightObjectHeightGapMeters * worldHeightScale);
+        float heightRatio = objectHeightWorld / Mathf.Max(minGapWorld, lightHeightWorld - objectHeightWorld);
+
+        for (int i = 0; i < bottomCorners.Length; i++)
+        {
+            Vector2 fromLight = bottomCorners[i] - light;
+            Vector2 projected = bottomCorners[i];
+            if (fromLight.sqrMagnitude > 0.0001f)
+            {
+                Vector2 direction = fromLight.normalized;
+                float heightExtraDistance = Mathf.Max(fromLight.magnitude * heightRatio, objectHeightWorld);
+                heightExtraDistance = Mathf.Min(heightExtraDistance, shadowLength);
+                projected = bottomCorners[i] + direction * heightExtraDistance;
+            }
+            candidates.Add(projected);
+        }
+
+        return ConvexHull(candidates);
+    }
+
+    private static Vector2[] GetBoundsCorners(Bounds bounds)
     {
         Vector2 min = bounds.min;
         Vector2 max = bounds.max;
-        Vector2[] corners =
+        return new[]
         {
             new Vector2(min.x, min.y),
             new Vector2(min.x, max.y),
             new Vector2(max.x, max.y),
             new Vector2(max.x, min.y),
         };
+    }
 
-        a = corners[0];
-        b = corners[0];
-        float minDot = Vector2.Dot(corners[0], tangent);
-        float maxDot = minDot;
-        for (int i = 1; i < corners.Length; i++)
-        {
-            float dot = Vector2.Dot(corners[i], tangent);
-            if (dot < minDot)
-            {
-                minDot = dot;
-                a = corners[i];
-            }
-            if (dot > maxDot)
-            {
-                maxDot = dot;
-                b = corners[i];
-            }
-        }
+    private float GetAverageFieldToWorldScale()
+    {
+        Vector2 scale = GetFieldToWorldScale();
+        return (Mathf.Abs(scale.x) + Mathf.Abs(scale.y)) * 0.5f;
     }
 
     private bool TryGetCasterBounds(Transform caster, out Bounds bounds)
@@ -359,6 +352,18 @@ public class ShadowManager : MonoBehaviour
 
         bounds = new Bounds(caster.position, Vector3.one * 0.5f);
         return true;
+    }
+
+    private bool TryGetCasterShadowData(Transform caster, out Bounds footprintBounds, out float objectHeightWorld)
+    {
+        objectHeightWorld = 0f;
+        if (caster.TryGetComponent<PhysicalShadowCaster>(out var physicalCaster) &&
+            physicalCaster.TryGetWorldShadowCaster(out footprintBounds, out objectHeightWorld))
+        {
+            return true;
+        }
+
+        return TryGetCasterBounds(caster, out footprintBounds);
     }
 
     private void ResolvePlayerWallCollision()
@@ -560,20 +565,67 @@ public class ShadowManager : MonoBehaviour
         return false;
     }
 
-    private static bool IsPointInShadowPolygon(Vector2 point, ShadowPolygon polygon)
+    private static bool IsPointInShadowPolygon(Vector2 point, Vector2[] polygon)
     {
-        return SameSide(point, polygon.A, polygon.B, polygon.C)
-            && SameSide(point, polygon.B, polygon.C, polygon.D)
-            && SameSide(point, polygon.C, polygon.D, polygon.A)
-            && SameSide(point, polygon.D, polygon.A, polygon.B);
+        if (polygon == null || polygon.Length < 3)
+            return false;
+
+        bool hasPositive = false;
+        bool hasNegative = false;
+        for (int i = 0; i < polygon.Length; i++)
+        {
+            Vector2 a = polygon[i];
+            Vector2 b = polygon[(i + 1) % polygon.Length];
+            float cross = Cross(b - a, point - a);
+            if (cross > 0.0001f)
+                hasPositive = true;
+            else if (cross < -0.0001f)
+                hasNegative = true;
+
+            if (hasPositive && hasNegative)
+                return false;
+        }
+
+        return true;
     }
 
-    private static bool SameSide(Vector2 point, Vector2 a, Vector2 b, Vector2 inside)
+    private static Vector2[] ConvexHull(List<Vector2> points)
     {
-        Vector2 edge = b - a;
-        float pointCross = Cross(edge, point - a);
-        float insideCross = Cross(edge, inside - a);
-        return pointCross * insideCross >= 0f;
+        if (points == null || points.Count < 3)
+            return new Vector2[0];
+
+        points.Sort((a, b) =>
+        {
+            int xCompare = a.x.CompareTo(b.x);
+            return xCompare != 0 ? xCompare : a.y.CompareTo(b.y);
+        });
+
+        var hull = new List<Vector2>();
+        for (int i = 0; i < points.Count; i++)
+        {
+            while (hull.Count >= 2 &&
+                   Cross(hull[hull.Count - 1] - hull[hull.Count - 2], points[i] - hull[hull.Count - 1]) <= 0f)
+            {
+                hull.RemoveAt(hull.Count - 1);
+            }
+            hull.Add(points[i]);
+        }
+
+        int lowerCount = hull.Count;
+        for (int i = points.Count - 2; i >= 0; i--)
+        {
+            while (hull.Count > lowerCount &&
+                   Cross(hull[hull.Count - 1] - hull[hull.Count - 2], points[i] - hull[hull.Count - 1]) <= 0f)
+            {
+                hull.RemoveAt(hull.Count - 1);
+            }
+            hull.Add(points[i]);
+        }
+
+        if (hull.Count > 1)
+            hull.RemoveAt(hull.Count - 1);
+
+        return hull.ToArray();
     }
 
     private static float Cross(Vector2 a, Vector2 b)

@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <defs>
+    <marker id="arrow-red" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#d33"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#2374d6"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#198754"/>
+    </marker>
+    <marker id="arrow-yellow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#d9a300"/>
+    </marker>
+    <style>
+      text { font-family: "Segoe UI", "Yu Gothic", sans-serif; fill: #20242a; }
+      .title { font-size: 34px; font-weight: 700; }
+      .label { font-size: 22px; font-weight: 600; }
+      .small { font-size: 18px; }
+      .tiny { font-size: 15px; }
+      .panel { fill: #f7f8fb; stroke: #c8d0dc; stroke-width: 2; rx: 18; }
+      .field { fill: #fdfefe; stroke: #1f2937; stroke-width: 4; }
+      .tag { fill: #fff; stroke: #111827; stroke-width: 4; }
+      .tag-inner { fill: #111827; }
+      .tag-white { fill: #fff; }
+      .axis-x { stroke: #d33; stroke-width: 6; marker-end: url(#arrow-red); }
+      .axis-y { stroke: #2374d6; stroke-width: 6; marker-end: url(#arrow-blue); }
+      .axis-z { stroke: #198754; stroke-width: 6; marker-end: url(#arrow-green); }
+      .light { stroke: #d9a300; stroke-width: 6; stroke-dasharray: 14 10; marker-end: url(#arrow-yellow); }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="760" fill="#ffffff"/>
+  <text x="60" y="58" class="title">ARマーカーの向き</text>
+
+  <rect x="50" y="90" width="520" height="590" class="panel"/>
+  <text x="85" y="130" class="label">フィールド基準タグ ID10-13</text>
+  <text x="85" y="162" class="small">上辺を「奥 / カメラ側」へ向ける</text>
+
+  <rect x="130" y="210" width="360" height="360" class="field"/>
+  <line x1="130" y1="390" x2="490" y2="390" stroke="#d6dbe5" stroke-width="2"/>
+  <line x1="310" y1="210" x2="310" y2="570" stroke="#d6dbe5" stroke-width="2"/>
+
+  <text x="270" y="200" class="small">奥 / カメラ側  (+Y)</text>
+  <text x="265" y="602" class="small">手前 / 人側  (-Y)</text>
+  <text x="80" y="397" class="small">左 (-X)</text>
+  <text x="500" y="397" class="small">右 (+X)</text>
+
+  <g transform="translate(192 258)">
+    <rect x="-28" y="-28" width="56" height="56" class="tag"/>
+    <rect x="-18" y="-18" width="36" height="36" class="tag-inner"/>
+    <rect x="-8" y="-8" width="16" height="16" class="tag-white"/>
+    <text x="-25" y="-42" class="tiny">ID10</text>
+  </g>
+  <g transform="translate(428 258)">
+    <rect x="-28" y="-28" width="56" height="56" class="tag"/>
+    <rect x="-18" y="-18" width="36" height="36" class="tag-inner"/>
+    <rect x="-8" y="-8" width="16" height="16" class="tag-white"/>
+    <text x="-25" y="-42" class="tiny">ID11</text>
+  </g>
+  <g transform="translate(428 522)">
+    <rect x="-28" y="-28" width="56" height="56" class="tag"/>
+    <rect x="-18" y="-18" width="36" height="36" class="tag-inner"/>
+    <rect x="-8" y="-8" width="16" height="16" class="tag-white"/>
+    <text x="-25" y="-42" class="tiny">ID12</text>
+  </g>
+  <g transform="translate(192 522)">
+    <rect x="-28" y="-28" width="56" height="56" class="tag"/>
+    <rect x="-18" y="-18" width="36" height="36" class="tag-inner"/>
+    <rect x="-8" y="-8" width="16" height="16" class="tag-white"/>
+    <text x="-25" y="-42" class="tiny">ID13</text>
+  </g>
+
+  <line x1="310" y1="390" x2="445" y2="390" class="axis-x"/>
+  <line x1="310" y1="390" x2="310" y2="255" class="axis-y"/>
+  <text x="450" y="398" class="small" fill="#d33">+X</text>
+  <text x="320" y="255" class="small" fill="#2374d6">+Y</text>
+
+  <rect x="630" y="90" width="520" height="590" class="panel"/>
+  <text x="665" y="130" class="label">動かすタグ ID0</text>
+  <text x="665" y="162" class="small">正方形の面そのものがUnity上のマーカー平面</text>
+
+  <g transform="translate(890 360)">
+    <rect x="-105" y="-105" width="210" height="210" class="tag"/>
+    <rect x="-75" y="-75" width="150" height="150" class="tag-inner"/>
+    <rect x="-35" y="-35" width="70" height="70" class="tag-white"/>
+    <rect x="-12" y="-12" width="24" height="24" class="tag-inner"/>
+    <text x="-24" y="-124" class="small">ID0</text>
+  </g>
+
+  <line x1="890" y1="360" x2="1045" y2="360" class="axis-x"/>
+  <line x1="890" y1="360" x2="890" y2="205" class="axis-y"/>
+  <line x1="890" y1="360" x2="790" y2="470" class="axis-z"/>
+  <line x1="890" y1="360" x2="1010" y2="500" class="light"/>
+
+  <text x="1050" y="367" class="small" fill="#d33">マーカー +X</text>
+  <text x="902" y="205" class="small" fill="#2374d6">マーカー +Y</text>
+  <text x="665" y="505" class="small" fill="#198754">マーカー +Z = 面の法線</text>
+  <text x="1015" y="510" class="small" fill="#d9a300">ライト方向</text>
+
+  <text x="665" y="595" class="small">Unity対応: X = Python x, Y = Python z, Z = Python y</text>
+  <text x="665" y="628" class="small">ライトが逆向きなら Invert Light Direction をON</text>
+</svg>

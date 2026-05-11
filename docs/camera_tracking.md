@@ -165,6 +165,8 @@ Unity の `MainScene` では `Shadow Wall A` と `Shadow Wall B` に `PhysicalSh
 - `Sync Moved Position To Manual Field Position`: 再生していない時にSceneビューでオブジェクトを動かすと、その位置を手動配置として保存する
 - Sceneビューでは水色のGizmoが底面プレビューです。Gizmoは角丸ではなく完全な長方形です
 
+`ShadowManager` の `Light Height Meters` はライトの高さです。`Physical Size Meters.z` と組み合わせて、物体の上面からフィールドへ落ちる影の伸びを計算します。
+
 立方体の置き方やサイズを変えた場合は、Unity Inspector の `PhysicalShadowCaster` と `configs/field_config.json` の `object_tags[].size_m` を実測値に合わせてください。
 
 ## 精度と安定性
