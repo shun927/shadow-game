@@ -17,3 +17,4 @@ unity/UserSettings/
 unity/.vs/
 unity/*.csproj
 unity/*.sln
+devices/**/.pio/

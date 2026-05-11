@@ -19,10 +19,14 @@ public class Player : MonoBehaviour
     [SerializeField] private float squeezeScale = 0.5f;
     [SerializeField] private float squeezeLerp = 10f;
 
+    [Header("Input Debug")]
+    [SerializeField] private bool logLeftClickInput = true;
+
     private float currentAngle;
     private Vector3 originalScale;
     private float lastMoveAngle;
     private bool isSqueezing;
+    private bool previousLeftClick;
     private SpriteRenderer[] childRenderers;
     private Color[] originalColors;
 
@@ -43,6 +47,11 @@ public class Player : MonoBehaviour
     void Update()
     {
         bool leftClick = Input.GetMouseButton(0);
+        if (logLeftClickInput && leftClick != previousLeftClick)
+        {
+            Debug.Log(leftClick ? "Left click input: pressed" : "Left click input: released");
+        }
+        previousLeftClick = leftClick;
 
         // 左クリック中でなく、スクイーズ復帰も完了していればスプライトを回転させる
         if (!leftClick && !isSqueezing)

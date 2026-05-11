@@ -10,12 +10,15 @@
    - Python、Unity、UDP、座標系のつながり。
 3. `camera_tracking.md`
    - カメラ認識、内部キャリブレーション、外部校正、本番検出。
-4. `game_design.md`
+4. `xiao_ble_switch.md`
+   - XIAO ESP32S3 とスイッチを BLE マウス入力にする手順。
+5. `game_design.md`
    - ゲーム体験、ルール、未決定事項。
 
 ## 実務手順
 
 - 全体把握: `../README.md`
 - カメラ認識、内部キャリブレーション、外部校正: `camera_tracking.md`
+- XIAO ESP32S3 BLE スイッチ入力: `xiao_ble_switch.md`
 - Unity入力可視化の開き方: `../unity/README.md`
 - PythonなしのUDPテスト: `../tools/send_sample_tracking_udp.py`
