@@ -18,3 +18,5 @@ unity/.vs/
 unity/*.csproj
 unity/*.sln
 devices/**/.pio/
+devices/**/.vscode/
+devices/**/.gitignore
