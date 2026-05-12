@@ -58,6 +58,13 @@ def main():
             raise SystemExit("--camera-name is required when --config is used.")
         config = load_json(args.config)
         camera_config = find_camera_config(config, args.camera_name)
+        source = str(camera_config.get("source", "opencv")).lower()
+        if source in ("realsense", "d435i"):
+            raise SystemExit(
+                "RealSense cameras use SDK intrinsics directly; "
+                "skip internal chessboard calibration for this camera and run "
+                "`apriltag-calibrate-field` for field extrinsics."
+            )
         args.camera = int(camera_config["camera_index"])
         args.width = int(camera_config.get("width", args.width))
         args.height = int(camera_config.get("height", args.height))

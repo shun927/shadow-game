@@ -9,13 +9,12 @@ import numpy as np
 from .core import (
     draw_tag_label,
     estimate_pose,
-    load_calibration,
     load_json,
     make_detector,
     marker_object_points,
-    open_capture_from_config,
+    open_camera_runtime_from_config,
     polygon_area,
-    read_frame_with_retries,
+    release_camera_runtime,
     rotation_to_euler_zyx_deg,
     transform_from_rvec_tvec,
     xyz_payload,
@@ -115,48 +114,8 @@ class TrackingFilter:
         stable["tracking_mode"] = "single_camera_pose" if visible_count == 1 else "multi_camera_pose"
         return stable
 
-
-def load_camera_runtime(camera_config):
-    cap = open_capture_from_config(camera_config)
-    if not cap.isOpened():
-        raise RuntimeError(
-            f"Could not open camera {camera_config['name']} "
-            f"(index={camera_config.get('camera_index')}, "
-            f"backend={camera_config.get('backend', 'auto')}). "
-            "Run `uv run apriltag-list-cameras` and update configs/field_config.json."
-        )
-
-    ok, frame = read_frame_with_retries(cap)
-    if not ok:
-        cap.release()
-        raise RuntimeError(
-            f"Could not read from camera {camera_config['name']} "
-            f"(index={camera_config.get('camera_index')}, "
-            f"backend={camera_config.get('backend', 'msmf')}). "
-            "Try another USB port, close other camera apps, or swap camera_index values."
-        )
-
-    height, width = frame.shape[:2]
-    camera_matrix, dist_coeffs, using_fallback = load_calibration(
-        camera_config.get("calibration"),
-        width,
-        height,
-        60.0,
-    )
-    if using_fallback:
-        print(f"WARNING: {camera_config['name']} has no calibration; pose is approximate.")
-
-    return {
-        "config": camera_config,
-        "cap": cap,
-        "camera_matrix": camera_matrix,
-        "dist_coeffs": dist_coeffs,
-    }
-
-
 def detect_targets_from_camera(runtime, detector, object_points_by_id, field_from_camera):
-    cap = runtime["cap"]
-    ok, frame = cap.read()
+    ok, frame = runtime["read_frame"]()
     if not ok:
         return [], None
 
@@ -204,7 +163,7 @@ def detect_targets_from_camera(runtime, detector, object_points_by_id, field_fro
             result = {
                 "id": marker_id,
                 "camera": runtime["config"]["name"],
-                "camera_index": int(runtime["config"]["camera_index"]),
+                "camera_index": int(runtime.get("camera_index", -1)),
                 "field_from_marker": field_from_marker,
                 "field_xyz_m": xyz_payload(field_xyz),
                 "field_euler_zyx_deg": rotation_to_euler_zyx_deg(field_from_marker[:3, :3]),
@@ -267,7 +226,7 @@ def payload(selected, results, tracked_markers):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Track one AprilTag 36h11 in field coordinates using two webcams."
+        description="Track AprilTag 36h11 markers in field coordinates using two cameras."
     )
     parser.add_argument("--config", default="configs/field_config.json")
     parser.add_argument("--extrinsics", default="calibrations/field_extrinsics.json")
@@ -310,7 +269,7 @@ def main():
         name = camera_config["name"]
         if name not in extrinsics["cameras"]:
             raise SystemExit(f"Missing extrinsics for camera {name}")
-        runtimes.append(load_camera_runtime(camera_config))
+        runtimes.append(open_camera_runtime_from_config(camera_config))
         field_from_camera_by_name[name] = np.asarray(
             extrinsics["cameras"][name]["field_from_camera"],
             dtype=np.float64,
@@ -377,7 +336,7 @@ def main():
             frame_index += 1
     finally:
         for runtime in runtimes:
-            runtime["cap"].release()
+            release_camera_runtime(runtime)
         if udp_socket:
             udp_socket.close()
         cv2.destroyAllWindows()

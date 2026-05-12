@@ -1,0 +1,83 @@
+{
+  "field": {
+    "size_m": 0.3
+  },
+  "cameras": [
+    {
+      "name": "left",
+      "source": "realsense",
+      "serial": "",
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "stream": "color",
+      "warmup_frames": 5,
+      "frame_timeout_ms": 1000
+    },
+    {
+      "name": "right",
+      "source": "opencv",
+      "camera_index": 0,
+      "backend": "auto",
+      "fourcc": "MJPG",
+      "apply_settings": false,
+      "require_frame_on_open": true,
+      "calibration": "calibrations/camera_right_calibration.json",
+      "width": 640,
+      "height": 480,
+      "fps": 30
+    }
+  ],
+  "moving_tag": {
+    "id": 0,
+    "size_m": 0.07
+  },
+  "object_tags": [
+    {
+      "id": 1,
+      "size_m": 0.04,
+      "label": "cube_a"
+    },
+    {
+      "id": 2,
+      "size_m": 0.04,
+      "label": "cube_b"
+    }
+  ],
+  "tracking": {
+    "min_image_area_px2": 600,
+    "smoothing_alpha": 0.35,
+    "single_camera_alpha": 0.75,
+    "camera_transition_alpha": 0.9,
+    "max_jump_m": 0.22,
+    "jump_reset_frames": 5,
+    "allow_single_camera_pose": true,
+    "camera_switch_area_ratio": 1.35
+  },
+  "reference_tags": [
+    {
+      "id": 10,
+      "size_m": 0.04,
+      "center_m": { "x": -0.12, "y": 0.12, "z": 0.0 },
+      "yaw_deg": 0.0
+    },
+    {
+      "id": 11,
+      "size_m": 0.04,
+      "center_m": { "x": 0.12, "y": 0.12, "z": 0.0 },
+      "yaw_deg": 0.0
+    },
+    {
+      "id": 12,
+      "size_m": 0.04,
+      "center_m": { "x": 0.12, "y": -0.12, "z": 0.0 },
+      "yaw_deg": 0.0
+    },
+    {
+      "id": 13,
+      "size_m": 0.04,
+      "center_m": { "x": -0.12, "y": -0.12, "z": 0.0 },
+      "yaw_deg": 0.0
+    }
+  ]
+}

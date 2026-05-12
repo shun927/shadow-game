@@ -105,5 +105,6 @@ uv run apriltag-detect-2cam --config configs/field_config.json --extrinsics cali
 - [docs/system_architecture.md](docs/system_architecture.md): Python / Unity / UDP / 座標系
 - [docs/camera_tracking.md](docs/camera_tracking.md): カメラ認識・キャリブレーション手順
 - [docs/xiao_ble_switch.md](docs/xiao_ble_switch.md): XIAO ESP32S3 BLE スイッチ入力手順
+- [docs/realsense_d435i.md](docs/realsense_d435i.md): Intel RealSense D435i 入力手順
 - [docs/game_design.md](docs/game_design.md): ゲーム設計メモ
 - [unity/README.md](unity/README.md): Unity 入力可視化の起動方法

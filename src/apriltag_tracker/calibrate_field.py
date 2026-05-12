@@ -9,11 +9,11 @@ from .core import (
     estimate_pose,
     field_tag_object_points,
     invert_transform,
-    load_calibration,
     load_json,
     make_detector,
-    open_capture_from_config,
-    read_frame_with_retries,
+    open_camera_runtime_from_config,
+    read_camera_frame_with_retries,
+    release_camera_runtime,
     transform_from_rvec_tvec,
     write_json,
     xyz_payload,
@@ -57,30 +57,23 @@ def reprojection_error(object_points, image_points, rvec, tvec, camera_matrix, d
 
 def calibrate_camera_extrinsic(camera_config, config, detector):
     name = camera_config["name"]
-    cap = open_capture_from_config(camera_config)
-    if not cap.isOpened():
-        raise RuntimeError(f"Could not open camera {name} index {camera_config['camera_index']}")
+    runtime = open_camera_runtime_from_config(camera_config)
 
-    ok, frame = read_frame_with_retries(cap)
+    ok, frame = read_camera_frame_with_retries(runtime)
     if not ok:
-        cap.release()
+        release_camera_runtime(runtime)
         raise RuntimeError(f"Could not read from camera {name}")
 
-    height, width = frame.shape[:2]
-    camera_matrix, dist_coeffs, using_fallback = load_calibration(
-        camera_config.get("calibration"),
-        width,
-        height,
-        60.0,
-    )
-    if using_fallback:
+    camera_matrix = runtime["camera_matrix"]
+    dist_coeffs = runtime["dist_coeffs"]
+    if runtime.get("using_fallback_calibration"):
         print(f"WARNING: {name} has no calibration file; extrinsics will be approximate.")
 
     print(f"[{name}] Show at least 2 reference tags, preferably all 4.")
     print(f"[{name}] Press SPACE to save extrinsic. Press q or ESC to abort.")
 
     while True:
-        ok, frame = cap.read()
+        ok, frame = runtime["read_frame"]()
         if not ok:
             break
 
@@ -113,7 +106,7 @@ def calibrate_camera_extrinsic(camera_config, config, detector):
 
         key = cv2.waitKey(1) & 0xFF
         if key in (27, ord("q")):
-            cap.release()
+            release_camera_runtime(runtime)
             cv2.destroyWindow(f"Field extrinsic calibration - {name}")
             raise RuntimeError(f"Aborted camera {name}")
         if key == 32:
@@ -143,11 +136,13 @@ def calibrate_camera_extrinsic(camera_config, config, detector):
                 dist_coeffs,
             )
 
-            cap.release()
+            release_camera_runtime(runtime)
             cv2.destroyWindow(f"Field extrinsic calibration - {name}")
             return {
                 "name": name,
-                "camera_index": int(camera_config["camera_index"]),
+                "source": runtime.get("source", "opencv"),
+                "camera_index": int(runtime.get("camera_index", -1)),
+                "serial": runtime.get("serial", ""),
                 "seen_reference_tag_ids": sorted(set(seen_ids)),
                 "camera_from_field": camera_from_field.tolist(),
                 "field_from_camera": field_from_camera.tolist(),
@@ -156,7 +151,7 @@ def calibrate_camera_extrinsic(camera_config, config, detector):
                 "max_reprojection_error_px": max_error,
             }
 
-    cap.release()
+    release_camera_runtime(runtime)
     cv2.destroyWindow(f"Field extrinsic calibration - {name}")
     raise RuntimeError(f"Could not calibrate camera {name}")
 
