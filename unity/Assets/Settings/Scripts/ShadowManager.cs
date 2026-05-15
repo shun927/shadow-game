@@ -76,6 +76,7 @@ public class ShadowManager : MonoBehaviour
     private Vector3 lastSafePlayerPos;
     private readonly List<GameObject> trailShadows = new List<GameObject>();
     private readonly List<Vector2[]> currentShadows = new List<Vector2[]>();
+    private readonly List<GameObject> respawnInvertEffects = new List<GameObject>();
     private int checkpointTrailCount;
     private bool hasFadeOriginalColor;
     private bool outsideShadowPenaltyEnabled = true;
@@ -112,7 +113,6 @@ public class ShadowManager : MonoBehaviour
     void Update()
     {
         if (mainCamera == null || player == null) return;
-        if (isRespawning) return;
 
         Vector3 lightWorld = GetLightWorldPosition();
 
@@ -126,6 +126,14 @@ public class ShadowManager : MonoBehaviour
 
         UpdateObjectShadows(lightWorld);
         ResolvePlayerWallCollision();
+
+        if (isRespawning)
+        {
+            lastPlayerPos = player.position;
+            if (!IsPlayerInsideWall())
+                lastSafePlayerPos = player.position;
+            return;
+        }
 
         // 移動中に影の軌跡を生成（プレイヤーの現在位置ではなく少し後ろに配置）
         GenerateTrail();
@@ -702,13 +710,7 @@ public class ShadowManager : MonoBehaviour
 
     public void ResetForNewGame()
     {
-        if (respawnCoroutine != null)
-        {
-            StopCoroutine(respawnCoroutine);
-            respawnCoroutine = null;
-        }
-
-        isRespawning = false;
+        CancelRespawnEffects();
         outsideTimer = 0f;
         trailDistanceAccum = 0f;
         checkpointTrailCount = 0;
@@ -726,12 +728,18 @@ public class ShadowManager : MonoBehaviour
 
         if (player != null)
         {
+            if (playerOriginalScale != Vector3.zero)
+                player.localScale = playerOriginalScale;
+
             lastPlayerPos = player.position;
             lastSafePlayerPos = player.position;
 
             if (player.TryGetComponent<Player>(out var playerScript))
             {
+                playerScript.enabled = true;
+                playerScript.SetVisible(true);
                 playerScript.ResetChildrenAlpha();
+                playerScript.ResetMotionVisuals();
             }
         }
 
@@ -740,6 +748,35 @@ public class ShadowManager : MonoBehaviour
 
         if (shadowMesh != null)
             shadowMesh.Clear();
+    }
+
+    public void CancelRespawnEffects()
+    {
+        if (respawnCoroutine != null)
+        {
+            StopCoroutine(respawnCoroutine);
+            respawnCoroutine = null;
+        }
+
+        isRespawning = false;
+        outsideTimer = 0f;
+
+        for (int i = respawnInvertEffects.Count - 1; i >= 0; i--)
+        {
+            if (respawnInvertEffects[i] != null)
+                Destroy(respawnInvertEffects[i]);
+        }
+        respawnInvertEffects.Clear();
+
+        if (player != null && player.TryGetComponent<Player>(out var playerScript))
+        {
+            playerScript.enabled = true;
+            playerScript.SetVisible(true);
+            playerScript.ResetChildrenAlpha();
+        }
+
+        if (fadeTarget != null && hasFadeOriginalColor)
+            fadeTarget.color = fadeOriginalColor;
     }
 
     private void Respawn()
@@ -924,9 +961,15 @@ public class ShadowManager : MonoBehaviour
         }
 
         if (invertObject != null)
+        {
+            respawnInvertEffects.Remove(invertObject);
             Destroy(invertObject);
+        }
         if (restoreObject != null)
+        {
+            respawnInvertEffects.Remove(restoreObject);
             Destroy(restoreObject);
+        }
     }
 
     private GameObject CreateRespawnInvertCircle(string objectName, Vector3 position, int sortingOrder, Material material)
@@ -940,6 +983,7 @@ public class ShadowManager : MonoBehaviour
         spriteRenderer.color = Color.white;
         spriteRenderer.sortingOrder = sortingOrder;
         spriteRenderer.sharedMaterial = material;
+        respawnInvertEffects.Add(effectObject);
         return effectObject;
     }
 

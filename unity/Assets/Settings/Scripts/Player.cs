@@ -9,6 +9,7 @@ public class Player : MonoBehaviour
     [SerializeField] private float orbitRadius = 1.5f;
     [SerializeField] private float orbitSpeed = 180f; // degrees per second
     [SerializeField] private float spriteZ = 0f;
+    [SerializeField] private int orbitSpriteSortingOrder = 50;
 
     [Header("Move Bounds")]
     [SerializeField] private Vector2 boundsMin = new Vector2(-10f, -5f);
@@ -35,6 +36,7 @@ public class Player : MonoBehaviour
         if (squeezeTarget != null)
             originalScale = squeezeTarget.localScale;
 
+        ApplyOrbitSpriteSorting();
         CacheChildRenderers();
     }
 
@@ -112,6 +114,8 @@ public class Player : MonoBehaviour
         // スプライトの位置を更新（全てのtransform変更後に行う）
         if (orbitSprite != null)
         {
+            ApplyOrbitSpriteSorting();
+
             float rad = currentAngle * Mathf.Deg2Rad;
             Vector3 offset = new Vector3(Mathf.Cos(rad), Mathf.Sin(rad), 0f) * orbitRadius;
             Vector3 pos = transform.position + offset;
@@ -122,6 +126,21 @@ public class Player : MonoBehaviour
             Vector3 dir = transform.position - orbitSprite.position;
             float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
             orbitSprite.rotation = Quaternion.Euler(0f, 0f, angle);
+        }
+    }
+
+    private void ApplyOrbitSpriteSorting()
+    {
+        if (orbitSprite == null)
+            return;
+
+        SpriteRenderer[] orbitRenderers = orbitSprite.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < orbitRenderers.Length; i++)
+        {
+            if (orbitRenderers[i] == null)
+                continue;
+
+            orbitRenderers[i].sortingOrder = orbitSpriteSortingOrder;
         }
     }
 
@@ -165,5 +184,19 @@ public class Player : MonoBehaviour
         {
             childRenderers[i].enabled = visible;
         }
+    }
+
+    public void ResetMotionVisuals()
+    {
+        isSqueezing = false;
+
+        if (squeezeTarget == null)
+            return;
+
+        if (originalScale == Vector3.zero)
+            originalScale = squeezeTarget.localScale;
+
+        squeezeTarget.localScale = originalScale;
+        squeezeTarget.rotation = Quaternion.identity;
     }
 }

@@ -13,6 +13,13 @@ public class RankingManager : MonoBehaviour
     [SerializeField] private string rankingFilePath = "Assets/Settings/Data/ranking.json";
     [SerializeField] private int maxEntriesToKeep;
     [SerializeField] private int topCount = 5;
+    [SerializeField] private Color latestEntryColor = new Color(1f, 0.85f, 0.3f, 1f);
+    [SerializeField] private Color latestEntryMarkColor = new Color(0f, 0f, 0f, 0.67f);
+
+    public int LatestHighlightedLineIndex { get; private set; } = -1;
+    public string LatestHighlightedLineText { get; private set; } = string.Empty;
+    public Color LatestEntryColor => latestEntryColor;
+    public Color LatestEntryMarkColor => latestEntryMarkColor;
 
     [Serializable]
     private class RankingData
@@ -23,6 +30,7 @@ public class RankingManager : MonoBehaviour
     [Serializable]
     private class RankingEntry
     {
+        public string id;
         public string name;
         public float clearTimeSeconds;
         public string clearedAt;
@@ -31,8 +39,10 @@ public class RankingManager : MonoBehaviour
     public string RecordClearAndBuildTopText(float clearTimeSeconds)
     {
         RankingData data = LoadRankingData();
+        string latestId = Guid.NewGuid().ToString("N");
         data.entries.Add(new RankingEntry
         {
+            id = latestId,
             name = DateTime.Now.ToString("H時m分"),
             clearTimeSeconds = clearTimeSeconds,
             clearedAt = DateTime.Now.ToString("o"),
@@ -40,14 +50,14 @@ public class RankingManager : MonoBehaviour
 
         SortAndTrim(data);
         SaveRankingData(data);
-        return BuildTopText(data, clearTimeSeconds, true);
+        return BuildTopText(data, latestId, true);
     }
 
     public string BuildCurrentTopText()
     {
         RankingData data = LoadRankingData();
         SortAndTrim(data);
-        return BuildTopText(data, 0f, false);
+        return BuildTopText(data, string.Empty, true);
     }
 
     private RankingData LoadRankingData()
@@ -89,13 +99,14 @@ public class RankingManager : MonoBehaviour
             data.entries.RemoveRange(maxEntriesToKeep, data.entries.Count - maxEntriesToKeep);
     }
 
-    private string BuildTopText(RankingData data, float latestClearTimeSeconds, bool includeLatestTime)
+    private string BuildTopText(RankingData data, string latestEntryId, bool includeHeader)
     {
-        StringBuilder builder = new StringBuilder();
-        if (includeLatestTime)
-            builder.AppendLine($"CLEAR TIME {FormatTime(latestClearTimeSeconds)}");
+        LatestHighlightedLineIndex = -1;
+        LatestHighlightedLineText = string.Empty;
 
-        builder.AppendLine();
+        StringBuilder builder = new StringBuilder();
+        if (includeHeader)
+            builder.AppendLine("ランキング");
 
         int count = Mathf.Min(topCount, data.entries.Count);
         if (count == 0)
@@ -107,10 +118,23 @@ public class RankingManager : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             RankingEntry entry = data.entries[i];
-            builder.AppendLine($"{i + 1}位 {FormatTime(entry.clearTimeSeconds)}");
+            string line = $"{i + 1}位 {FormatTime(entry.clearTimeSeconds)}";
+            if (!string.IsNullOrEmpty(latestEntryId) && entry.id == latestEntryId)
+            {
+                LatestHighlightedLineIndex = includeHeader ? i + 1 : i;
+                LatestHighlightedLineText = line;
+                line = DecorateLatestEntry(line);
+            }
+
+            builder.AppendLine(line);
         }
 
         return builder.ToString();
+    }
+
+    private string DecorateLatestEntry(string line)
+    {
+        return $"<color=#00000000>{line}</color>";
     }
 
     private string GetFullPath()

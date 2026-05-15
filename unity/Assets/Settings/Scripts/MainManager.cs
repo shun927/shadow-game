@@ -1,10 +1,11 @@
 using UnityEngine;
 using TMPro;
 using System.Collections;
-using System.Collections.Generic;
 
 public class MainManager : MonoBehaviour
 {
+    private const string RankingTextBackgroundObjectName = "Ranking Text Background";
+
     [SerializeField] private GameObject clearText;
     [SerializeField] private Player player;
     [SerializeField] private ShadowManager shadowManager;
@@ -18,11 +19,26 @@ public class MainManager : MonoBehaviour
     [SerializeField] private bool showRankingDebugAlways;
     [SerializeField] private TextAlignmentOptions rankingTextAlignment = TextAlignmentOptions.Top;
     [SerializeField] private Vector3 rankingTextOffset = new Vector3(0f, -1.2f, 0f);
+    [SerializeField] private bool showRankingTextBackground = true;
+    [SerializeField] private Color rankingTextBackgroundColor = new Color(0f, 0f, 0f, 0.76f);
+    [SerializeField] private Vector2 rankingTextBackgroundPadding = new Vector2(24f, 14f);
+    [SerializeField] private Vector2 rankingTextBackgroundBlockMargin = new Vector2(40f, 24f);
+    [SerializeField] private Vector2 rankingTextBackgroundMinSize = new Vector2(0f, 0f);
+    [SerializeField] private Vector2 rankingTextBackgroundOffset;
+    [SerializeField] private float rankingTextBackgroundCornerRadius = 8f;
+    [SerializeField] private int rankingTextBackgroundCornerSegments = 8;
+    [SerializeField] private Vector2 rankingLatestHighlightPadding = new Vector2(16f, 6f);
+    [SerializeField] private Vector2 rankingLatestHighlightMinSize = new Vector2(0f, 0f);
+    [SerializeField] private float rankingLatestHighlightCornerRadius = 8f;
+    [SerializeField] private int rankingLatestHighlightCornerSegments = 8;
     [SerializeField] private float rankingShowDelay = 1f;
     [SerializeField] private float rankingSlideDuration = 0.6f;
     [SerializeField] private Vector2 rankingSlideFromOffset = new Vector2(-900f, 0f);
     [SerializeField] private float clearCleanupDelay = 5f;
     [SerializeField] private Vector3 playerCenterPosition = new Vector3(0f, 0f, -2f);
+    [SerializeField] private float clearTextGradientDuration = 0.6f;
+    [SerializeField] private Color clearTextGradientTopColor = Color.white;
+    [SerializeField] private Color clearTextGradientBottomColor = Color.white;
 
     [Header("Start Transition")]
     [SerializeField] private Camera transitionCamera;
@@ -34,7 +50,7 @@ public class MainManager : MonoBehaviour
     [SerializeField] private TMP_Text countdownText;
     [SerializeField] private int countdownSeconds = 3;
     [SerializeField] private float countdownFontSize = 200f;
-    [SerializeField] private Color countdownColor = Color.white;
+    [SerializeField] private Color countdownColor = new Color(0f, 0f, 0f, 0.55f);
 
     private Coroutine clearCleanupCoroutine;
     private string clearTextOriginalText = "Game Clear";
@@ -43,17 +59,13 @@ public class MainManager : MonoBehaviour
     private Canvas transitionCanvas;
     private CircleWipeOverlay transitionOverlay;
     private Coroutine rankingShowCoroutine;
+    private Coroutine clearTextGradientCoroutine;
+    private RectTransform rankingTextBackground;
+    private RoundedRectangleGraphic rankingTextBackgroundGraphic;
+    private RectTransform rankingLatestHighlightBackground;
+    private TMP_Text rankingLatestHighlightText;
     private Vector3 rankingRootVisibleLocalPosition;
     private bool hasRankingRootVisibleLocalPosition;
-    private readonly List<RankingSpriteSlideState> rankingSpriteSlideStates = new List<RankingSpriteSlideState>();
-
-    private class RankingSpriteSlideState
-    {
-        public Transform transform;
-        public Vector3 startWorldPosition;
-        public Vector3 targetWorldPosition;
-    }
-
     void Awake()
     {
         if (player != null)
@@ -84,6 +96,9 @@ public class MainManager : MonoBehaviour
 
     void Update()
     {
+        if (showRankingDebugAlways)
+            RefreshRankingDebugPreview();
+
         if (previousShowRankingDebugAlways == showRankingDebugAlways)
             return;
 
@@ -102,6 +117,8 @@ public class MainManager : MonoBehaviour
     private IEnumerator StartGameSequence()
     {
         isStartingGame = true;
+        if (shadowManager != null)
+            shadowManager.CancelRespawnEffects();
 
         if (clearCleanupCoroutine != null)
         {
@@ -144,12 +161,18 @@ public class MainManager : MonoBehaviour
             shadowManager.enabled = false;
         }
 
+        if (player != null)
+            player.enabled = false;
+
         Vector2 openCenter = GetScreenPosition(player != null ? player.transform.position : playerCenterPosition);
         yield return RunCircleWipe(openCenter, 0f, GetFullScreenHoleRadius(), transitionOpenDuration);
         HideTransitionOverlay();
 
         if (shadowManager != null)
             shadowManager.enabled = true;
+
+        if (player != null)
+            player.enabled = false;
 
         yield return RunCountdown();
 
@@ -189,14 +212,19 @@ public class MainManager : MonoBehaviour
         if (clearCleanupCoroutine != null)
             StopCoroutine(clearCleanupCoroutine);
 
-        // クリアテキスト表示
-        if (clearText != null)
-            clearText.SetActive(true);
-
         float clearTimeSeconds = timeManager != null ? timeManager.ElapsedTime : 0f;
         TMP_Text clearTextLabel = clearText != null ? clearText.GetComponent<TMP_Text>() : null;
         if (clearTextLabel != null)
+        {
             clearTextLabel.text = clearTextOriginalText;
+            if (clearTextGradientCoroutine != null)
+                StopCoroutine(clearTextGradientCoroutine);
+            clearTextGradientCoroutine = StartCoroutine(ShowClearTextWithGradient(clearTextLabel));
+        }
+        else if (clearText != null)
+        {
+            clearText.SetActive(true);
+        }
 
         if (rankingManager != null)
         {
@@ -253,6 +281,12 @@ public class MainManager : MonoBehaviour
     {
         if (clearText != null)
             clearText.SetActive(false);
+
+        if (clearTextGradientCoroutine != null)
+        {
+            StopCoroutine(clearTextGradientCoroutine);
+            clearTextGradientCoroutine = null;
+        }
 
         if (rankingShowCoroutine != null)
         {
@@ -329,6 +363,9 @@ public class MainManager : MonoBehaviour
         EnsureTransitionUi();
         if (countdownText == null)
             yield break;
+
+        if (player != null)
+            player.enabled = false;
 
         countdownText.gameObject.SetActive(true);
         countdownText.fontSize = countdownFontSize;
@@ -432,6 +469,9 @@ public class MainManager : MonoBehaviour
         ApplyRankingTextStyle();
         rankingText.text = text;
         rankingRoot.gameObject.SetActive(visible || showRankingDebugAlways);
+        UpdateRankingTextBackground(visible || showRankingDebugAlways);
+        ApplyRankingChildSpriteVisibility();
+        UpdateRankingLatestHighlight();
     }
 
     private IEnumerator ShowRankingAfterDelay(string text)
@@ -451,14 +491,16 @@ public class MainManager : MonoBehaviour
             rankingRoot = rankingText.GetComponent<RectTransform>();
 
         Transform slideTarget = rankingRoot != null ? rankingRoot : rankingText.transform;
+        CacheRankingRootVisiblePosition(slideTarget);
         ApplyRankingTextStyle();
         rankingText.text = text;
-        CacheRankingRootVisiblePosition(slideTarget);
-        CaptureRankingSpriteSlideStates(slideTarget);
+        UpdateRankingTextBackground(true);
+        ApplyRankingChildSpriteVisibility();
+        UpdateRankingLatestHighlight();
 
         slideTarget.localPosition = rankingRootVisibleLocalPosition + (Vector3)rankingSlideFromOffset;
         slideTarget.gameObject.SetActive(true);
-        ApplyRankingSpriteSlidePosition(0f);
+        SyncRankingTextBackgroundTransform();
     }
 
     private IEnumerator SlideInRanking(string text)
@@ -472,6 +514,9 @@ public class MainManager : MonoBehaviour
         Transform slideTarget = rankingRoot != null ? rankingRoot : rankingText.transform;
         ApplyRankingTextStyle();
         rankingText.text = text;
+        UpdateRankingTextBackground(true);
+        ApplyRankingChildSpriteVisibility();
+        UpdateRankingLatestHighlight();
         CacheRankingRootVisiblePosition(slideTarget);
 
         Vector3 startPosition = slideTarget.localPosition;
@@ -488,13 +533,13 @@ public class MainManager : MonoBehaviour
             float smoothT = Mathf.SmoothStep(0f, 1f, t);
 
             slideTarget.localPosition = Vector3.Lerp(startPosition, targetPosition, smoothT);
-            ApplyRankingSpriteSlidePosition(smoothT);
+            SyncRankingTextBackgroundTransform();
 
             yield return null;
         }
 
         slideTarget.localPosition = targetPosition;
-        ApplyRankingSpriteSlidePosition(1f);
+        SyncRankingTextBackgroundTransform();
     }
 
     private void CacheRankingRootVisiblePosition(Transform slideTarget)
@@ -507,58 +552,13 @@ public class MainManager : MonoBehaviour
         hasRankingRootVisibleLocalPosition = true;
     }
 
-    private void CaptureRankingSpriteSlideStates(Transform slideTarget)
-    {
-        rankingSpriteSlideStates.Clear();
-
-        SpriteRenderer[] spriteRenderers = slideTarget.GetComponentsInChildren<SpriteRenderer>(true);
-        foreach (SpriteRenderer spriteRenderer in spriteRenderers)
-        {
-            if (spriteRenderer == null)
-                continue;
-
-            spriteRenderer.gameObject.SetActive(true);
-            spriteRenderer.enabled = true;
-
-            Vector3 targetWorldPosition = spriteRenderer.transform.position;
-            rankingSpriteSlideStates.Add(new RankingSpriteSlideState
-            {
-                transform = spriteRenderer.transform,
-                startWorldPosition = GetWorldPositionWithScreenOffset(targetWorldPosition, rankingSlideFromOffset),
-                targetWorldPosition = targetWorldPosition
-            });
-        }
-    }
-
-    private void ApplyRankingSpriteSlidePosition(float t)
-    {
-        foreach (RankingSpriteSlideState state in rankingSpriteSlideStates)
-        {
-            if (state.transform == null)
-                continue;
-
-            state.transform.position = Vector3.Lerp(state.startWorldPosition, state.targetWorldPosition, t);
-        }
-    }
-
-    private Vector3 GetWorldPositionWithScreenOffset(Vector3 worldPosition, Vector2 screenOffset)
-    {
-        Camera cameraToUse = transitionCamera != null ? transitionCamera : Camera.main;
-        if (cameraToUse == null)
-            return worldPosition + (Vector3)screenOffset;
-
-        Vector3 screenPosition = cameraToUse.WorldToScreenPoint(worldPosition);
-        screenPosition.x += screenOffset.x;
-        screenPosition.y += screenOffset.y;
-        return cameraToUse.ScreenToWorldPoint(screenPosition);
-    }
-
     private void RefreshRankingDebugVisibility()
     {
         if (rankingManager != null && rankingText != null)
         {
             ApplyRankingTextStyle();
             rankingText.text = rankingManager.BuildCurrentTopText();
+            UpdateRankingLatestHighlight();
         }
 
         if (rankingText != null)
@@ -568,12 +568,314 @@ public class MainManager : MonoBehaviour
 
             Transform visibilityTarget = rankingRoot != null ? rankingRoot : rankingText.transform;
             visibilityTarget.gameObject.SetActive(showRankingDebugAlways);
+            UpdateRankingTextBackground(showRankingDebugAlways);
+            ApplyRankingChildSpriteVisibility();
+            UpdateRankingLatestHighlight();
         }
+    }
+
+    private void RefreshRankingDebugPreview()
+    {
+        if (rankingText == null)
+            return;
+
+        if (rankingRoot == null)
+            rankingRoot = rankingText.GetComponent<RectTransform>();
+
+        Transform visibilityTarget = rankingRoot != null ? rankingRoot : rankingText.transform;
+        if (!visibilityTarget.gameObject.activeSelf)
+            visibilityTarget.gameObject.SetActive(true);
+
+        ApplyRankingTextStyle();
+        UpdateRankingTextBackground(true);
+        ApplyRankingChildSpriteVisibility();
+        UpdateRankingLatestHighlight();
     }
 
     private void ApplyRankingTextStyle()
     {
         if (rankingText != null)
             rankingText.alignment = rankingTextAlignment;
+    }
+
+    private void ApplyRankingChildSpriteVisibility()
+    {
+        if (rankingRoot == null)
+            return;
+
+        SpriteRenderer[] spriteRenderers = rankingRoot.GetComponentsInChildren<SpriteRenderer>(true);
+        foreach (SpriteRenderer spriteRenderer in spriteRenderers)
+        {
+            if (spriteRenderer == null)
+                continue;
+
+            spriteRenderer.enabled = !showRankingTextBackground;
+        }
+    }
+
+    private void UpdateRankingTextBackground(bool visible)
+    {
+        EnsureRankingTextBackgroundObject();
+        if (rankingTextBackground == null || rankingTextBackgroundGraphic == null)
+            return;
+
+        rankingTextBackground.gameObject.SetActive(showRankingTextBackground && visible);
+        if (!showRankingTextBackground || !visible)
+            return;
+
+        Bounds textBounds = GetRankingTextBoundsInBackgroundParent();
+        SyncRankingTextBackgroundTransform(textBounds.center);
+
+        Vector2 size = textBounds.size;
+        if (size.x <= 1f || size.y <= 1f)
+            size = new Vector2(rankingText.preferredWidth, rankingText.preferredHeight);
+
+        size += (rankingTextBackgroundPadding + rankingTextBackgroundBlockMargin) * 2f;
+        size.x = Mathf.Max(size.x, rankingTextBackgroundMinSize.x);
+        size.y = Mathf.Max(size.y, rankingTextBackgroundMinSize.y);
+
+        rankingTextBackground.sizeDelta = size;
+        rankingTextBackgroundGraphic.color = rankingTextBackgroundColor;
+        rankingTextBackgroundGraphic.CornerRadius = rankingTextBackgroundCornerRadius;
+        rankingTextBackgroundGraphic.CornerSegments = rankingTextBackgroundCornerSegments;
+    }
+
+    private void EnsureRankingTextBackgroundObject()
+    {
+        if (rankingTextBackground != null && rankingTextBackgroundGraphic != null)
+            return;
+
+        if (rankingRoot == null && rankingText != null)
+            rankingRoot = rankingText.GetComponent<RectTransform>();
+
+        RectTransform backgroundParent = GetRankingTextBackgroundParent();
+        if (rankingRoot == null || backgroundParent == null)
+            return;
+
+        Transform existingBackground = backgroundParent.Find(RankingTextBackgroundObjectName);
+        GameObject backgroundObject = existingBackground != null
+            ? existingBackground.gameObject
+            : new GameObject(RankingTextBackgroundObjectName);
+
+        backgroundObject.layer = rankingRoot.gameObject.layer;
+        backgroundObject.transform.SetParent(backgroundParent, false);
+        rankingTextBackground = backgroundObject.GetComponent<RectTransform>();
+        if (rankingTextBackground == null)
+            rankingTextBackground = backgroundObject.AddComponent<RectTransform>();
+
+        rankingTextBackgroundGraphic = backgroundObject.GetComponent<RoundedRectangleGraphic>();
+        if (rankingTextBackgroundGraphic == null)
+            rankingTextBackgroundGraphic = backgroundObject.AddComponent<RoundedRectangleGraphic>();
+
+        rankingTextBackgroundGraphic.raycastTarget = false;
+        rankingTextBackground.gameObject.SetActive(false);
+        SyncRankingTextBackgroundTransform();
+    }
+
+    private RectTransform GetRankingTextBackgroundParent()
+    {
+        if (rankingRoot != null && rankingRoot.parent is RectTransform parent)
+            return parent;
+
+        if (rankingText != null)
+        {
+            RectTransform textRect = rankingText.GetComponent<RectTransform>();
+            if (textRect != null)
+                return textRect.parent as RectTransform;
+        }
+
+        return null;
+    }
+
+    private Bounds GetRankingTextBoundsInBackgroundParent()
+    {
+        if (rankingText == null)
+            return new Bounds(Vector3.zero, Vector3.zero);
+
+        rankingText.ForceMeshUpdate(true, true);
+        Bounds textBounds = rankingText.textBounds;
+        RectTransform backgroundParent = GetRankingTextBackgroundParent();
+        if (backgroundParent == null)
+            return textBounds;
+
+        Vector3 min = textBounds.min;
+        Vector3 max = textBounds.max;
+        Vector3[] corners =
+        {
+            new Vector3(min.x, min.y, 0f),
+            new Vector3(min.x, max.y, 0f),
+            new Vector3(max.x, max.y, 0f),
+            new Vector3(max.x, min.y, 0f)
+        };
+
+        Bounds parentBounds = new Bounds(
+            backgroundParent.InverseTransformPoint(rankingText.transform.TransformPoint(corners[0])),
+            Vector3.zero);
+
+        for (int i = 1; i < corners.Length; i++)
+            parentBounds.Encapsulate(backgroundParent.InverseTransformPoint(rankingText.transform.TransformPoint(corners[i])));
+
+        return parentBounds;
+    }
+
+    private void SyncRankingTextBackgroundTransform()
+    {
+        SyncRankingTextBackgroundTransform(GetRankingTextBoundsInBackgroundParent().center);
+    }
+
+    private void SyncRankingTextBackgroundTransform(Vector3 textParentCenter)
+    {
+        if (rankingTextBackground == null || rankingRoot == null)
+            return;
+
+        rankingTextBackground.anchorMin = new Vector2(0.5f, 0.5f);
+        rankingTextBackground.anchorMax = new Vector2(0.5f, 0.5f);
+        rankingTextBackground.pivot = new Vector2(0.5f, 0.5f);
+        rankingTextBackground.localPosition = textParentCenter + (Vector3)rankingTextBackgroundOffset;
+        rankingTextBackground.localRotation = Quaternion.identity;
+        rankingTextBackground.localScale = Vector3.one;
+
+        int targetSiblingIndex = rankingRoot.GetSiblingIndex();
+        if (rankingTextBackground.GetSiblingIndex() < targetSiblingIndex)
+            targetSiblingIndex--;
+
+        rankingTextBackground.SetSiblingIndex(Mathf.Max(0, targetSiblingIndex));
+    }
+
+    private void UpdateRankingLatestHighlight()
+    {
+        if (rankingText == null || rankingManager == null || rankingManager.LatestHighlightedLineIndex < 0)
+        {
+            SetRankingLatestHighlightVisible(false);
+            return;
+        }
+
+        EnsureRankingLatestHighlightObjects();
+        if (rankingLatestHighlightBackground == null || rankingLatestHighlightText == null)
+            return;
+
+        rankingText.ForceMeshUpdate(true, true);
+        TMP_TextInfo textInfo = rankingText.textInfo;
+        int lineIndex = rankingManager.LatestHighlightedLineIndex;
+        if (lineIndex < 0 || lineIndex >= textInfo.lineCount)
+        {
+            SetRankingLatestHighlightVisible(false);
+            return;
+        }
+
+        TMP_LineInfo lineInfo = textInfo.lineInfo[lineIndex];
+        float width = Mathf.Max(1f, lineInfo.lineExtents.max.x - lineInfo.lineExtents.min.x);
+        float height = Mathf.Max(1f, lineInfo.ascender - lineInfo.descender);
+        Vector2 center = new Vector2(
+            (lineInfo.lineExtents.min.x + lineInfo.lineExtents.max.x) * 0.5f,
+            (lineInfo.ascender + lineInfo.descender) * 0.5f);
+        Vector2 size = new Vector2(
+            width + rankingLatestHighlightPadding.x * 2f,
+            height + rankingLatestHighlightPadding.y * 2f);
+        size.x = Mathf.Max(size.x, rankingLatestHighlightMinSize.x);
+        size.y = Mathf.Max(size.y, rankingLatestHighlightMinSize.y);
+
+        rankingLatestHighlightBackground.anchoredPosition = center;
+        rankingLatestHighlightBackground.sizeDelta = size;
+        RoundedRectangleGraphic backgroundGraphic = rankingLatestHighlightBackground.GetComponent<RoundedRectangleGraphic>();
+        if (backgroundGraphic != null)
+        {
+            backgroundGraphic.color = rankingManager.LatestEntryMarkColor;
+            backgroundGraphic.CornerRadius = rankingLatestHighlightCornerRadius;
+            backgroundGraphic.CornerSegments = rankingLatestHighlightCornerSegments;
+        }
+
+        RectTransform highlightTextRect = rankingLatestHighlightText.rectTransform;
+        highlightTextRect.anchoredPosition = center;
+        highlightTextRect.sizeDelta = size;
+        rankingLatestHighlightText.text = rankingManager.LatestHighlightedLineText;
+        rankingLatestHighlightText.color = rankingManager.LatestEntryColor;
+        rankingLatestHighlightText.font = rankingText.font;
+        rankingLatestHighlightText.fontSharedMaterial = rankingText.fontSharedMaterial;
+        rankingLatestHighlightText.fontSize = rankingText.fontSize;
+        rankingLatestHighlightText.fontStyle = rankingText.fontStyle;
+        rankingLatestHighlightText.alignment = TextAlignmentOptions.Center;
+        rankingLatestHighlightText.raycastTarget = false;
+
+        SetRankingLatestHighlightVisible(true);
+    }
+
+    private void EnsureRankingLatestHighlightObjects()
+    {
+        if (rankingText == null)
+            return;
+
+        RectTransform parent = rankingRoot != null ? rankingRoot : rankingText.GetComponent<RectTransform>();
+        if (parent == null)
+            return;
+
+        if (rankingLatestHighlightBackground == null)
+        {
+            GameObject backgroundObject = new GameObject("Latest Entry Highlight");
+            backgroundObject.transform.SetParent(parent, false);
+            rankingLatestHighlightBackground = backgroundObject.AddComponent<RectTransform>();
+            rankingLatestHighlightBackground.anchorMin = new Vector2(0.5f, 0.5f);
+            rankingLatestHighlightBackground.anchorMax = new Vector2(0.5f, 0.5f);
+            rankingLatestHighlightBackground.pivot = new Vector2(0.5f, 0.5f);
+            RoundedRectangleGraphic roundedRectangle = backgroundObject.AddComponent<RoundedRectangleGraphic>();
+            roundedRectangle.raycastTarget = false;
+        }
+
+        if (rankingLatestHighlightText == null)
+        {
+            GameObject textObject = new GameObject("Latest Entry Text");
+            textObject.transform.SetParent(parent, false);
+            RectTransform textRect = textObject.AddComponent<RectTransform>();
+            textRect.anchorMin = new Vector2(0.5f, 0.5f);
+            textRect.anchorMax = new Vector2(0.5f, 0.5f);
+            textRect.pivot = new Vector2(0.5f, 0.5f);
+            rankingLatestHighlightText = textObject.AddComponent<TextMeshProUGUI>();
+            rankingLatestHighlightText.raycastTarget = false;
+        }
+
+        rankingLatestHighlightBackground.SetAsLastSibling();
+        rankingLatestHighlightText.rectTransform.SetAsLastSibling();
+    }
+
+    private void SetRankingLatestHighlightVisible(bool visible)
+    {
+        if (rankingLatestHighlightBackground != null)
+            rankingLatestHighlightBackground.gameObject.SetActive(visible);
+
+        if (rankingLatestHighlightText != null)
+            rankingLatestHighlightText.gameObject.SetActive(visible);
+    }
+
+    private IEnumerator ShowClearTextWithGradient(TMP_Text text)
+    {
+        if (clearText != null)
+            clearText.SetActive(true);
+
+        text.enableVertexGradient = true;
+
+        float duration = Mathf.Max(0.01f, clearTextGradientDuration);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+            ApplyClearTextGradient(text, smoothT);
+            yield return null;
+        }
+
+        ApplyClearTextGradient(text, 1f);
+        clearTextGradientCoroutine = null;
+    }
+
+    private void ApplyClearTextGradient(TMP_Text text, float alpha)
+    {
+        Color top = clearTextGradientTopColor;
+        Color bottom = clearTextGradientBottomColor;
+        float bottomAlpha = Mathf.Clamp01((alpha - 0.35f) / 0.65f);
+        top.a *= alpha;
+        bottom.a *= bottomAlpha;
+        text.colorGradient = new VertexGradient(top, top, bottom, bottom);
     }
 }

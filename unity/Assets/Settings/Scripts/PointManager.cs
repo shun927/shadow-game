@@ -39,6 +39,20 @@ public class PointManager : MonoBehaviour
     [Header("Collect Animation")]
     [SerializeField] private float collectMoveDuration = 0.45f;
 
+    [Header("Spawn Animation")]
+    [SerializeField] private float spawnGrowDuration = 0.35f;
+    [SerializeField] private float spawnStartScale = 0.1f;
+
+    [Header("Point Marker")]
+    [SerializeField] private bool showPointMarker = true;
+    [SerializeField] private float pointMarkerMinSize = 0.7f;
+    [SerializeField] private float pointMarkerMaxSize = 1.15f;
+    [SerializeField] private float pointMarkerPulseDuration = 0.8f;
+    [SerializeField] private float pointMarkerRotationZ = 45f;
+    [SerializeField] private float pointMarkerZOffset = -0.02f;
+    [SerializeField] private int pointMarkerSortingOrderOffset = 1;
+    [SerializeField] private float pointMarkerInvertAmount = 1f;
+
     [Header("Collect Square Effect")]
     [SerializeField] private bool showCollectSquareEffect = true;
     [SerializeField] private float collectSquareEffectDuration = 0.9f;
@@ -74,6 +88,8 @@ public class PointManager : MonoBehaviour
     private bool isGameActive;
     private Sprite collectSquareSprite;
     private Material collectSquareInvertMaterial;
+    private GameObject currentPointMarker;
+    private Coroutine currentPointMarkerCoroutine;
 
     public Vector3 RespawnPoint => points == 0 ? new Vector3(0f, 0f, -2f) : lastCollectPosition;
 
@@ -200,6 +216,7 @@ public class PointManager : MonoBehaviour
         lastCollectPosition.z = -2f;
 
         GameObject collectedPoint = currentPoint;
+        ClearPointMarker();
         currentPoint = null;
 
         PlayCollectSquareEffect(lastCollectPosition);
@@ -238,6 +255,8 @@ public class PointManager : MonoBehaviour
         Vector3 pos = new Vector3(positions[index].x, positions[index].y, pointZ);
         currentPoint = Instantiate(pointPrefab, pos, Quaternion.identity);
         ApplyPointSortingOrder(currentPoint);
+        AttachPointMarker(currentPoint);
+        StartCoroutine(AnimateSpawnPoint(currentPoint.transform));
         orbitAngle = 0f;
 
         if (GetCurrentMovementMode() == PointMovementMode.Orbit)
@@ -246,8 +265,35 @@ public class PointManager : MonoBehaviour
         }
     }
 
+    private IEnumerator AnimateSpawnPoint(Transform pointTransform)
+    {
+        if (pointTransform == null)
+            yield break;
+
+        Vector3 targetScale = pointTransform.localScale;
+        Vector3 startScale = targetScale * Mathf.Max(0f, spawnStartScale);
+        float duration = Mathf.Max(0.01f, spawnGrowDuration);
+        float elapsed = 0f;
+
+        pointTransform.localScale = startScale;
+
+        while (elapsed < duration && pointTransform != null)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+            pointTransform.localScale = Vector3.Lerp(startScale, targetScale, smoothT);
+            yield return null;
+        }
+
+        if (pointTransform != null)
+            pointTransform.localScale = targetScale;
+    }
+
     public void ResetGame(bool startImmediately)
     {
+        ClearPointMarker();
+
         if (currentPoint != null)
         {
             Destroy(currentPoint);
@@ -287,6 +333,64 @@ public class PointManager : MonoBehaviour
 
         if (isGameActive)
             SpawnPoint();
+    }
+
+    private void AttachPointMarker(GameObject pointObject)
+    {
+        ClearPointMarker();
+
+        if (!showPointMarker || pointObject == null)
+            return;
+
+        EnsureCollectSquareSprite();
+        if (collectSquareSprite == null)
+            return;
+
+        GameObject markerObject = new GameObject("Point Invert Marker");
+        markerObject.transform.SetParent(pointObject.transform, false);
+        markerObject.transform.localPosition = new Vector3(0f, 0f, pointMarkerZOffset);
+        markerObject.transform.localRotation = Quaternion.Euler(0f, 0f, pointMarkerRotationZ);
+        markerObject.transform.localScale = Vector3.one * pointMarkerMinSize;
+
+        SpriteRenderer markerRenderer = markerObject.AddComponent<SpriteRenderer>();
+        markerRenderer.sprite = collectSquareSprite;
+        markerRenderer.color = new Color(1f, 1f, 1f, Mathf.Clamp01(pointMarkerInvertAmount));
+        markerRenderer.sortingOrder = pointSortingOrder + pointMarkerSortingOrderOffset;
+        markerRenderer.sharedMaterial = GetCollectSquareInvertMaterial();
+
+        currentPointMarker = markerObject;
+        currentPointMarkerCoroutine = StartCoroutine(AnimatePointMarker(markerObject.transform, markerRenderer));
+    }
+
+    private IEnumerator AnimatePointMarker(Transform markerTransform, SpriteRenderer markerRenderer)
+    {
+        float duration = Mathf.Max(0.01f, pointMarkerPulseDuration);
+
+        while (markerTransform != null && markerRenderer != null)
+        {
+            float phase = Mathf.PingPong(Time.time / duration, 1f);
+            float smoothPhase = Mathf.SmoothStep(0f, 1f, phase);
+            float size = Mathf.Lerp(pointMarkerMinSize, pointMarkerMaxSize, smoothPhase);
+            markerTransform.localScale = Vector3.one * size;
+            markerRenderer.color = new Color(1f, 1f, 1f, Mathf.Clamp01(pointMarkerInvertAmount));
+            markerRenderer.sortingOrder = pointSortingOrder + pointMarkerSortingOrderOffset;
+            yield return null;
+        }
+    }
+
+    private void ClearPointMarker()
+    {
+        if (currentPointMarkerCoroutine != null)
+        {
+            StopCoroutine(currentPointMarkerCoroutine);
+            currentPointMarkerCoroutine = null;
+        }
+
+        if (currentPointMarker != null)
+        {
+            Destroy(currentPointMarker);
+            currentPointMarker = null;
+        }
     }
 
     private void MoveCollectedPointToCountSlot(GameObject collectedPoint, int countIndex, bool triggerGameClear)
