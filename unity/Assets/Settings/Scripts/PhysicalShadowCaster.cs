@@ -35,7 +35,7 @@ public class PhysicalShadowCaster : MonoBehaviour
     [SerializeField] private Color footprintVisualColor = new Color(0.18f, 0.18f, 0.18f, 1f);
     [SerializeField] private Color footprintBorderColor = new Color(1f, 1f, 1f, 1f);
     [SerializeField] private float footprintBorderWidth = 0.08f;
-    [SerializeField] private int footprintBorderSortingOrder = 20;
+    [SerializeField] private int footprintBorderSortingOrder = -5;
     [SerializeField] private Color footprintGizmoColor = new Color(0.1f, 0.85f, 1f, 0.35f);
 
     private Vector3 lastEditorPosition;
@@ -300,7 +300,8 @@ public class PhysicalShadowCaster : MonoBehaviour
 
         if (footprintBorderRenderer != null)
         {
-            footprintBorderRenderer.sortingOrder = footprintBorderSortingOrder;
+            int borderOrder = Mathf.Min(footprintBorderSortingOrder, -1);
+            footprintBorderRenderer.sortingOrder = borderOrder;
             footprintBorderRenderer.startColor = footprintBorderColor;
             footprintBorderRenderer.endColor = footprintBorderColor;
             footprintBorderRenderer.startWidth = footprintBorderWidth;
@@ -399,7 +400,7 @@ public class PhysicalShadowCaster : MonoBehaviour
         footprintBorderRenderer.endColor = footprintBorderColor;
         footprintBorderRenderer.startWidth = footprintBorderWidth;
         footprintBorderRenderer.endWidth = footprintBorderWidth;
-        footprintBorderRenderer.sortingOrder = footprintBorderSortingOrder;
+        footprintBorderRenderer.sortingOrder = Mathf.Min(footprintBorderSortingOrder, -1);
     }
 
     public bool TryGetWorldCollisionBounds(out Bounds bounds)

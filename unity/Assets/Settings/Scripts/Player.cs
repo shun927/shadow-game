@@ -35,7 +35,11 @@ public class Player : MonoBehaviour
         if (squeezeTarget != null)
             originalScale = squeezeTarget.localScale;
 
-        // 子オブジェクトの SpriteRenderer を取得
+        CacheChildRenderers();
+    }
+
+    private void CacheChildRenderers()
+    {
         childRenderers = GetComponentsInChildren<SpriteRenderer>();
         originalColors = new Color[childRenderers.Length];
         for (int i = 0; i < childRenderers.Length; i++)
@@ -126,6 +130,9 @@ public class Player : MonoBehaviour
     /// </summary>
     public void SetChildrenAlpha(float alpha)
     {
+        if (childRenderers == null || originalColors == null)
+            CacheChildRenderers();
+
         alpha = Mathf.Clamp01(alpha);
         for (int i = 0; i < childRenderers.Length; i++)
         {
@@ -140,9 +147,23 @@ public class Player : MonoBehaviour
     /// </summary>
     public void ResetChildrenAlpha()
     {
+        if (childRenderers == null || originalColors == null)
+            CacheChildRenderers();
+
         for (int i = 0; i < childRenderers.Length; i++)
         {
             childRenderers[i].color = originalColors[i];
+        }
+    }
+
+    public void SetVisible(bool visible)
+    {
+        if (childRenderers == null || originalColors == null)
+            CacheChildRenderers();
+
+        for (int i = 0; i < childRenderers.Length; i++)
+        {
+            childRenderers[i].enabled = visible;
         }
     }
 }

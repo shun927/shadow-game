@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class PointManager : MonoBehaviour
@@ -30,8 +32,26 @@ public class PointManager : MonoBehaviour
     [SerializeField] private float collectDistance = 0.5f;
     [SerializeField] private Transform player;
     [SerializeField] private float pointZ = 0f;
+    [SerializeField] private int pointSortingOrder = 10;
     [SerializeField] private ShadowManager shadowManager;
     [SerializeField] private MainManager mainManager;
+
+    [Header("Collect Animation")]
+    [SerializeField] private float collectMoveDuration = 0.45f;
+
+    [Header("Collect Square Effect")]
+    [SerializeField] private bool showCollectSquareEffect = true;
+    [SerializeField] private float collectSquareEffectDuration = 0.9f;
+    [SerializeField] private float collectSquareStartSize = 0.2f;
+    [SerializeField] private float collectSquareEndSize = 3f;
+    [SerializeField] private bool collectSquareFillScreen = true;
+    [SerializeField] private float collectSquareRotationZ = 45f;
+    [SerializeField] private float collectSquareScreenCoverPadding = 1.2f;
+    [SerializeField] private float collectSquareZ = -1f;
+    [SerializeField] private int collectSquareSortingOrder = 20;
+    [SerializeField] private float collectSquareInvertAmount = 1f;
+    [SerializeField] private float collectSquareRestoreDelay = 0.18f;
+    [SerializeField] private float collectSquareRestoreDuration = 0.45f;
 
     [Header("Point 2 - Orbit")]
     [SerializeField] private float orbitRadius = 1.5f;
@@ -46,10 +66,14 @@ public class PointManager : MonoBehaviour
     private GameObject currentPoint;
     private int points;
     private GameObject[] countSprites;
+    private readonly List<GameObject> collectedPoints = new List<GameObject>();
+    private readonly List<GameObject> collectSquareEffects = new List<GameObject>();
     private float orbitAngle;
     private Vector2 orbitCenter;
     private Vector3 lastCollectPosition;
     private bool isGameActive;
+    private Sprite collectSquareSprite;
+    private Material collectSquareInvertMaterial;
 
     public Vector3 RespawnPoint => points == 0 ? new Vector3(0f, 0f, -2f) : lastCollectPosition;
 
@@ -59,7 +83,11 @@ public class PointManager : MonoBehaviour
 
         foreach (var cs in countSprites)
         {
-            if (cs != null) cs.SetActive(false);
+            if (cs != null)
+            {
+                ApplyPointSortingOrder(cs);
+                cs.SetActive(false);
+            }
         }
 
         if (mainManager == null)
@@ -171,26 +199,24 @@ public class PointManager : MonoBehaviour
         lastCollectPosition = currentPoint.transform.position;
         lastCollectPosition.z = -2f;
 
-        Destroy(currentPoint);
+        GameObject collectedPoint = currentPoint;
         currentPoint = null;
 
-        if (points < countSprites.Length && countSprites[points] != null)
-        {
-            countSprites[points].SetActive(true);
-        }
+        PlayCollectSquareEffect(lastCollectPosition);
 
-        points++;
+        bool willClear = points + 1 >= 3;
+        MoveCollectedPointToCountSlot(collectedPoint, points, willClear);
 
         // チェックポイント保存
         if (shadowManager != null)
             shadowManager.SaveCheckpoint();
 
+        points++;
+
         // 3ポイント獲得でゲームクリア
         if (points >= 3)
         {
             Debug.Log($"[PointManager] Game Clear! points={points}, mainManager={mainManager}");
-            if (mainManager != null)
-                mainManager.OnGameClear();
             return;
         }
 
@@ -211,6 +237,7 @@ public class PointManager : MonoBehaviour
         int index = Random.Range(0, positions.Length);
         Vector3 pos = new Vector3(positions[index].x, positions[index].y, pointZ);
         currentPoint = Instantiate(pointPrefab, pos, Quaternion.identity);
+        ApplyPointSortingOrder(currentPoint);
         orbitAngle = 0f;
 
         if (GetCurrentMovementMode() == PointMovementMode.Orbit)
@@ -227,6 +254,20 @@ public class PointManager : MonoBehaviour
             currentPoint = null;
         }
 
+        for (int i = collectedPoints.Count - 1; i >= 0; i--)
+        {
+            if (collectedPoints[i] != null)
+                Destroy(collectedPoints[i]);
+        }
+        collectedPoints.Clear();
+
+        for (int i = collectSquareEffects.Count - 1; i >= 0; i--)
+        {
+            if (collectSquareEffects[i] != null)
+                Destroy(collectSquareEffects[i]);
+        }
+        collectSquareEffects.Clear();
+
         points = 0;
         orbitAngle = 0f;
         lastCollectPosition = Vector3.zero;
@@ -238,10 +279,229 @@ public class PointManager : MonoBehaviour
         foreach (var cs in countSprites)
         {
             if (cs != null)
+            {
+                ApplyPointSortingOrder(cs);
                 cs.SetActive(false);
+            }
         }
 
         if (isGameActive)
             SpawnPoint();
+    }
+
+    private void MoveCollectedPointToCountSlot(GameObject collectedPoint, int countIndex, bool triggerGameClear)
+    {
+        if (collectedPoint == null)
+            return;
+
+        collectedPoints.Add(collectedPoint);
+
+        if (countSprites == null)
+            countSprites = new GameObject[] { pointCount1, pointCount2, pointCount3 };
+
+        if (countIndex < 0 || countIndex >= countSprites.Length || countSprites[countIndex] == null)
+        {
+            if (triggerGameClear)
+                NotifyGameClearAfterPointArrived();
+            return;
+        }
+
+        Transform slot = countSprites[countIndex].transform;
+        Vector3 targetPosition = slot.position;
+        Vector3 targetScale = slot.lossyScale;
+
+        countSprites[countIndex].SetActive(false);
+        StartCoroutine(AnimateCollectedPoint(collectedPoint.transform, targetPosition, targetScale, triggerGameClear));
+    }
+
+    private IEnumerator AnimateCollectedPoint(Transform pointTransform, Vector3 targetPosition, Vector3 targetScale, bool triggerGameClear)
+    {
+        if (pointTransform == null)
+            yield break;
+
+        Vector3 startPosition = pointTransform.position;
+        Vector3 startScale = pointTransform.lossyScale;
+        float duration = Mathf.Max(0.01f, collectMoveDuration);
+        float elapsed = 0f;
+
+        while (elapsed < duration && pointTransform != null)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+            pointTransform.position = Vector3.Lerp(startPosition, targetPosition, smoothT);
+            pointTransform.localScale = Vector3.Lerp(startScale, targetScale, smoothT);
+            yield return null;
+        }
+
+        if (pointTransform != null)
+        {
+            pointTransform.position = targetPosition;
+            pointTransform.localScale = targetScale;
+        }
+
+        if (triggerGameClear)
+            NotifyGameClearAfterPointArrived();
+    }
+
+    private void NotifyGameClearAfterPointArrived()
+    {
+        if (mainManager != null)
+            mainManager.OnGameClear();
+    }
+
+    private void PlayCollectSquareEffect(Vector3 centerPosition)
+    {
+        if (!showCollectSquareEffect)
+            return;
+
+        EnsureCollectSquareSprite();
+        if (collectSquareSprite == null)
+            return;
+
+        Vector3 effectPosition = new Vector3(centerPosition.x, centerPosition.y, collectSquareZ);
+        GameObject effectObject = new GameObject("Collect Square Effect");
+        effectObject.transform.position = effectPosition;
+        effectObject.transform.rotation = Quaternion.Euler(0f, 0f, collectSquareRotationZ);
+        effectObject.transform.localScale = Vector3.one * collectSquareStartSize;
+
+        SpriteRenderer spriteRenderer = effectObject.AddComponent<SpriteRenderer>();
+        spriteRenderer.sprite = collectSquareSprite;
+        spriteRenderer.color = Color.white;
+        spriteRenderer.sortingOrder = collectSquareSortingOrder;
+        spriteRenderer.sharedMaterial = GetCollectSquareInvertMaterial();
+
+        GameObject restoreObject = new GameObject("Collect Square Restore Effect");
+        restoreObject.transform.SetParent(effectObject.transform, false);
+        restoreObject.transform.localPosition = Vector3.zero;
+        restoreObject.transform.localRotation = Quaternion.identity;
+        restoreObject.transform.localScale = Vector3.one;
+
+        SpriteRenderer restoreRenderer = restoreObject.AddComponent<SpriteRenderer>();
+        restoreRenderer.sprite = collectSquareSprite;
+        restoreRenderer.color = Color.clear;
+        restoreRenderer.sortingOrder = collectSquareSortingOrder + 1;
+        restoreRenderer.sharedMaterial = GetCollectSquareInvertMaterial();
+
+        collectSquareEffects.Add(effectObject);
+        float endSize = collectSquareFillScreen
+            ? Mathf.Max(collectSquareEndSize, GetScreenCoveringSquareSize(effectPosition))
+            : collectSquareEndSize;
+        StartCoroutine(AnimateCollectSquareEffect(effectObject, spriteRenderer, restoreObject.transform, restoreRenderer, endSize));
+    }
+
+    private IEnumerator AnimateCollectSquareEffect(
+        GameObject effectObject,
+        SpriteRenderer spriteRenderer,
+        Transform restoreTransform,
+        SpriteRenderer restoreRenderer,
+        float endSize)
+    {
+        if (effectObject == null || spriteRenderer == null)
+            yield break;
+
+        float duration = Mathf.Max(0.01f, collectSquareEffectDuration);
+        float restoreDelay = Mathf.Max(0f, collectSquareRestoreDelay);
+        float restoreDuration = Mathf.Max(0.01f, collectSquareRestoreDuration);
+        float totalDuration = Mathf.Max(duration, restoreDelay + restoreDuration);
+        float elapsed = 0f;
+
+        while (elapsed < totalDuration && effectObject != null && spriteRenderer != null)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+
+            effectObject.transform.localScale = Vector3.one * Mathf.Lerp(collectSquareStartSize, endSize, smoothT);
+            spriteRenderer.color = new Color(1f, 1f, 1f, Mathf.Clamp01(collectSquareInvertAmount));
+
+            if (restoreTransform != null && restoreRenderer != null)
+            {
+                float restoreT = Mathf.Clamp01((elapsed - restoreDelay) / restoreDuration);
+                float restoreSmoothT = Mathf.SmoothStep(0f, 1f, restoreT);
+                float parentScale = Mathf.Max(0.0001f, effectObject.transform.localScale.x);
+                float restoreWorldSize = Mathf.Lerp(collectSquareStartSize, endSize, restoreSmoothT);
+                restoreTransform.localScale = Vector3.one * (restoreWorldSize / parentScale);
+                restoreRenderer.color = restoreT > 0f
+                    ? new Color(1f, 1f, 1f, Mathf.Clamp01(collectSquareInvertAmount))
+                    : Color.clear;
+            }
+
+            yield return null;
+        }
+
+        collectSquareEffects.Remove(effectObject);
+        if (effectObject != null)
+            Destroy(effectObject);
+    }
+
+    private void EnsureCollectSquareSprite()
+    {
+        if (collectSquareSprite != null)
+            return;
+
+        Texture2D texture = new Texture2D(1, 1);
+        texture.SetPixel(0, 0, Color.white);
+        texture.Apply();
+        texture.hideFlags = HideFlags.HideAndDontSave;
+
+        collectSquareSprite = Sprite.Create(texture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f), 1f);
+        collectSquareSprite.hideFlags = HideFlags.HideAndDontSave;
+    }
+
+    private Material GetCollectSquareInvertMaterial()
+    {
+        if (collectSquareInvertMaterial != null)
+            return collectSquareInvertMaterial;
+
+        Shader invertShader = Shader.Find("Custom/ScreenInvertSprite");
+        if (invertShader == null)
+        {
+            Debug.LogWarning("[PointManager] Custom/ScreenInvertSprite shader was not found. Collect square effect will use the default sprite material.");
+            return null;
+        }
+
+        collectSquareInvertMaterial = new Material(invertShader);
+        collectSquareInvertMaterial.hideFlags = HideFlags.HideAndDontSave;
+        return collectSquareInvertMaterial;
+    }
+
+    private float GetScreenCoveringSquareSize(Vector3 centerPosition)
+    {
+        Camera cameraToUse = Camera.main;
+        if (cameraToUse == null)
+            return collectSquareEndSize;
+
+        float zDistance = Mathf.Abs(centerPosition.z - cameraToUse.transform.position.z);
+        Vector3[] screenCorners =
+        {
+            new Vector3(0f, 0f, zDistance),
+            new Vector3(Screen.width, 0f, zDistance),
+            new Vector3(0f, Screen.height, zDistance),
+            new Vector3(Screen.width, Screen.height, zDistance),
+        };
+
+        Quaternion inverseRotation = Quaternion.Inverse(Quaternion.Euler(0f, 0f, collectSquareRotationZ));
+        float maxLocalDistance = 0f;
+        for (int i = 0; i < screenCorners.Length; i++)
+        {
+            Vector3 cornerWorld = cameraToUse.ScreenToWorldPoint(screenCorners[i]);
+            Vector3 localCorner = inverseRotation * (cornerWorld - centerPosition);
+            maxLocalDistance = Mathf.Max(maxLocalDistance, Mathf.Abs(localCorner.x), Mathf.Abs(localCorner.y));
+        }
+
+        return maxLocalDistance * 2f * Mathf.Max(1f, collectSquareScreenCoverPadding);
+    }
+
+    private void ApplyPointSortingOrder(GameObject pointObject)
+    {
+        if (pointObject == null)
+            return;
+
+        SpriteRenderer[] renderers = pointObject.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            renderers[i].sortingOrder = pointSortingOrder;
+        }
     }
 }

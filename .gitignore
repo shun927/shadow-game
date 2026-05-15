@@ -17,6 +17,8 @@ unity/UserSettings/
 unity/.vs/
 unity/*.csproj
 unity/*.sln
+unity/Assets/Fonts/* SDF.asset
+unity/Assets/Fonts/* SDF.asset.meta
 devices/**/.pio/
 devices/**/.vscode/
 devices/**/.gitignore
