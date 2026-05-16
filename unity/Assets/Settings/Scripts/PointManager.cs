@@ -85,13 +85,14 @@ public class PointManager : MonoBehaviour
     private float orbitAngle;
     private Vector2 orbitCenter;
     private Vector3 lastCollectPosition;
+    private bool hasRespawnPoint;
     private bool isGameActive;
     private Sprite collectSquareSprite;
     private Material collectSquareInvertMaterial;
     private GameObject currentPointMarker;
     private Coroutine currentPointMarkerCoroutine;
 
-    public Vector3 RespawnPoint => points == 0 ? new Vector3(0f, 0f, -2f) : lastCollectPosition;
+    public Vector3 RespawnPoint => hasRespawnPoint ? lastCollectPosition : new Vector3(0f, 0f, -2f);
 
     void Start()
     {
@@ -214,6 +215,7 @@ public class PointManager : MonoBehaviour
     {
         lastCollectPosition = currentPoint.transform.position;
         lastCollectPosition.z = -2f;
+        hasRespawnPoint = true;
 
         GameObject collectedPoint = currentPoint;
         ClearPointMarker();
@@ -317,6 +319,7 @@ public class PointManager : MonoBehaviour
         points = 0;
         orbitAngle = 0f;
         lastCollectPosition = Vector3.zero;
+        hasRespawnPoint = false;
         isGameActive = startImmediately;
 
         if (countSprites == null)
