@@ -60,6 +60,7 @@
       padding: 0;
       list-style: none;
       flex: 1;
+      overflow: visible;
     }
 
     .entry {
@@ -70,8 +71,8 @@
       background: #111;
       color: #fff;
       border-radius: 12px;
-      padding: 16px 14px;
-      min-height: 86px;
+      padding: 12px 14px;
+      min-height: 68px;
       box-shadow: 0 4px 0 rgba(0, 0, 0, 0.24);
     }
 
@@ -82,7 +83,7 @@
     }
 
     .time {
-      font-size: clamp(34px, 13vw, 64px);
+      font-size: clamp(28px, 11vw, 52px);
       font-weight: 900;
       line-height: 1;
       text-align: right;
@@ -132,6 +133,7 @@
 
       .entry {
         grid-template-columns: 70px 1fr auto;
+        min-height: 72px;
       }
 
       .cleared {
@@ -177,7 +179,7 @@
       const sortedEntries = [...entries]
         .filter(entry => entry && Number.isFinite(Number(entry.clearTimeSeconds)))
         .sort((a, b) => Number(a.clearTimeSeconds) - Number(b.clearTimeSeconds))
-        .slice(0, 5);
+        .slice(0, 100);
 
       if (sortedEntries.length === 0) {
         rankingElement.innerHTML = `<li class="empty">まだ記録がありません</li>`;

@@ -18,7 +18,7 @@ public class RankingManager : MonoBehaviour
     [SerializeField] private string autoPushBranch = "seitaro";
     [SerializeField] private string autoPushCommitMessage = "Update ranking data";
     [SerializeField] private int maxEntriesToKeep;
-    [SerializeField] private int topCount = 5;
+    [SerializeField] private int topCount = 100;
     [SerializeField] private Color latestEntryColor = new Color(1f, 0.85f, 0.3f, 1f);
     [SerializeField] private Color latestEntryMarkColor = new Color(0f, 0f, 0f, 0.67f);
 
