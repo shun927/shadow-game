@@ -11,6 +11,12 @@ using UnityEditor;
 public class RankingManager : MonoBehaviour
 {
     [SerializeField] private string rankingFilePath = "Assets/Settings/Data/ranking.json";
+    [SerializeField] private bool publishRankingForPages = true;
+    [SerializeField] private string pagesRankingFilePath = "docs/ranking-data.json";
+    [SerializeField] private bool autoPushPagesRanking = true;
+    [SerializeField] private string autoPushRemote = "origin";
+    [SerializeField] private string autoPushBranch = "seitaro";
+    [SerializeField] private string autoPushCommitMessage = "Update ranking data";
     [SerializeField] private int maxEntriesToKeep;
     [SerializeField] private int topCount = 5;
     [SerializeField] private Color latestEntryColor = new Color(1f, 0.85f, 0.3f, 1f);
@@ -83,11 +89,79 @@ public class RankingManager : MonoBehaviour
     {
         string path = GetFullPath();
         Directory.CreateDirectory(Path.GetDirectoryName(path));
-        File.WriteAllText(path, JsonUtility.ToJson(data, true));
+        string json = JsonUtility.ToJson(data, true);
+        File.WriteAllText(path, json);
+        SavePagesRankingData(json);
 
 #if UNITY_EDITOR
         AssetDatabase.Refresh();
 #endif
+    }
+
+    private void SavePagesRankingData(string json)
+    {
+        if (!publishRankingForPages || string.IsNullOrWhiteSpace(pagesRankingFilePath))
+            return;
+
+        string pagesPath = GetProjectPath(pagesRankingFilePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(pagesPath));
+        File.WriteAllText(pagesPath, json);
+
+        if (autoPushPagesRanking)
+            PushPagesRankingData();
+    }
+
+    private void PushPagesRankingData()
+    {
+        string projectRoot = GetProjectRoot();
+        string rankingPath = NormalizeGitPath(pagesRankingFilePath);
+
+        if (!RunGit(projectRoot, "add", rankingPath))
+            return;
+
+        if (RunGitExitCode(projectRoot, false, "diff", "--cached", "--quiet") != 0)
+        {
+            if (!RunGit(projectRoot, "commit", "-m", autoPushCommitMessage))
+                return;
+        }
+
+        RunGit(projectRoot, "push", autoPushRemote, autoPushBranch);
+    }
+
+    private bool RunGit(string workingDirectory, params string[] arguments)
+    {
+        return RunGitExitCode(workingDirectory, true, arguments) == 0;
+    }
+
+    private int RunGitExitCode(string workingDirectory, bool logFailure, params string[] arguments)
+    {
+        try
+        {
+            System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                Arguments = BuildProcessArguments(arguments),
+            };
+
+            using (System.Diagnostics.Process process = System.Diagnostics.Process.Start(startInfo))
+            {
+                process.WaitForExit();
+                if (process.ExitCode != 0 && logFailure)
+                    Debug.LogWarning($"[RankingManager] git {string.Join(" ", arguments)} failed: {process.StandardError.ReadToEnd()}");
+
+                return process.ExitCode;
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning($"[RankingManager] Failed to run git: {exception.Message}");
+            return -1;
+        }
     }
 
     private void SortAndTrim(RankingData data)
@@ -142,8 +216,50 @@ public class RankingManager : MonoBehaviour
         if (Path.IsPathRooted(rankingFilePath))
             return rankingFilePath;
 
-        string projectRoot = Directory.GetParent(Application.dataPath).FullName;
-        return Path.Combine(projectRoot, rankingFilePath);
+        return GetProjectPath(rankingFilePath);
+    }
+
+    private string GetProjectPath(string relativeOrAbsolutePath)
+    {
+        if (Path.IsPathRooted(relativeOrAbsolutePath))
+            return relativeOrAbsolutePath;
+
+        return Path.Combine(GetProjectRoot(), relativeOrAbsolutePath);
+    }
+
+    private string GetProjectRoot()
+    {
+        return Directory.GetParent(Application.dataPath).FullName;
+    }
+
+    private static string NormalizeGitPath(string path)
+    {
+        return path.Replace('\\', '/');
+    }
+
+    private static string BuildProcessArguments(string[] arguments)
+    {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < arguments.Length; i++)
+        {
+            if (i > 0)
+                builder.Append(' ');
+
+            builder.Append(QuoteProcessArgument(arguments[i]));
+        }
+
+        return builder.ToString();
+    }
+
+    private static string QuoteProcessArgument(string argument)
+    {
+        if (string.IsNullOrEmpty(argument))
+            return "\"\"";
+
+        if (argument.IndexOfAny(new[] { ' ', '\t', '"', '\\' }) < 0)
+            return argument;
+
+        return $"\"{argument.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
     }
 
     private static string FormatTime(float seconds)

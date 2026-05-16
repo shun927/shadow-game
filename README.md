@@ -32,6 +32,10 @@ Webカメラ x2
 uv sync
 ```
 
+## ランキングサイト
+
+- [Shadow Game Ranking](https://shun927.github.io/shadow-game/)
+
 ## よく使う起動コマンド
 
 2カメラトラッキングを起動して Unity へ送信:

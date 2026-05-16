@@ -178,7 +178,7 @@ MonoBehaviour:
   rankingShowDelay: 1
   rankingSlideDuration: 0.6
   rankingSlideFromOffset: {x: -1500, y: 0}
-  clearCleanupDelay: 5
+  clearCleanupDelay: 10
   playerCenterPosition: {x: 0, y: 0, z: -2}
   clearTextGradientDuration: 0.6
   clearTextGradientTopColor: {r: 1, g: 1, b: 1, a: 1}
@@ -2277,9 +2277,9 @@ MonoBehaviour:
   collectMoveDuration: 0.45
   spawnGrowDuration: 0.35
   spawnStartScale: 0.1
-  showPointMarker: 0
-  pointMarkerMinSize: 0
-  pointMarkerMaxSize: 8
+  showPointMarker: 1
+  pointMarkerMinSize: 8
+  pointMarkerMaxSize: 12
   pointMarkerPulseDuration: 2
   pointMarkerRotationZ: 45
   pointMarkerZOffset: -0.02
