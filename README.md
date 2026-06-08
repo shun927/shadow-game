@@ -36,6 +36,12 @@ uv sync
 
 - [Shadow Game Ranking](https://shun927.github.io/shadow-game/)
 
+## デモ動画
+
+[デモ動画を開く](docs/media/PXL_20260517_064601782.mp4)
+
+<video src="docs/media/PXL_20260517_064601782.mp4" controls width="720"></video>
+
 ## よく使う起動コマンド
 
 2カメラトラッキングを起動して Unity へ送信:
