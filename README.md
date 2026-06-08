@@ -6,9 +6,7 @@
 
 ## プレイ動画
 
-[デモ動画を開く](docs/media/PXL_20260517_064601782.mp4)
-
-<video src="docs/media/PXL_20260517_064601782.mp4" controls width="720"></video>
+<video src="docs/media/PXL_20260517_064601782.mp4" controls preload="metadata" width="720"></video>
 
 
 ## 全体構成
