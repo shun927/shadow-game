@@ -4,6 +4,13 @@
 
 現在は、2台のWebカメラと AprilTag 36h11 でライト型デバイスをトラッキングし、Python から Unity へ UDP JSON で送って、Unity 側でライト位置・向き・照射点を可視化するところまでを作っています。
 
+## プレイ動画
+
+[デモ動画を開く](docs/media/PXL_20260517_064601782.mp4)
+
+<video src="docs/media/PXL_20260517_064601782.mp4" controls width="720"></video>
+
+
 ## 全体構成
 
 ```text
@@ -35,12 +42,6 @@ uv sync
 ## ランキングサイト
 
 - [Shadow Game Ranking](https://shun927.github.io/shadow-game/)
-
-## デモ動画
-
-[デモ動画を開く](docs/media/PXL_20260517_064601782.mp4)
-
-<video src="docs/media/PXL_20260517_064601782.mp4" controls width="720"></video>
 
 ## よく使う起動コマンド
 
