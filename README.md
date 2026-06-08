@@ -6,7 +6,7 @@
 
 ## プレイ動画
 
-<video src="docs/media/PXL_20260517_064601782.mp4" controls preload="metadata" width="720"></video>
+https://github.com/shun927/shadow-game/raw/seitaro/docs/media/PXL_20260517_064601782.mp4
 
 
 ## 全体構成
